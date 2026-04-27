@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Environment variables (for local development)
+.env
+.env.local
+.env.*.local
+
+# Vercel
+.vercel
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Old single-file version
+job-finder-gemini.html

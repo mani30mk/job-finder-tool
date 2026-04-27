@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>HUNTR — Multi-Source AI Job Finder</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=Bebas+Neue&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div>
+      <div class="logo-text">HUNTR</div>
+      <div class="logo-sub">Multi-Source AI Job Engine</div>
+    </div>
+  </div>
+  <div class="header-pills">
+    <span class="pill pill-cyan">JSearch</span>
+    <span class="pill pill-orange">Adzuna</span>
+    <span class="pill pill-green">RemoteOK</span>
+    <span class="pill" style="background:rgba(167,139,250,.1);color:#a78bfa;border:1px solid rgba(167,139,250,.2)">Gemini AI</span>
+  </div>
+</header>
+
+<main>
+
+<!-- API SOURCES STATUS -->
+<div class="sec-label">// Connected Sources — API keys configured on server</div>
+<div class="keys-panel">
+  <div class="keys-grid">
+    <div class="key-block">
+      <div class="key-label">
+        <span class="src-dot dot-cyan"></span>
+        <span style="color:var(--accent)">JSearch</span>
+        <span class="status-dot ok"></span>
+      </div>
+      <div class="key-hint">Scrapes LinkedIn, Indeed, Glassdoor, ZipRecruiter</div>
+    </div>
+    <div class="key-block">
+      <div class="key-label">
+        <span class="src-dot dot-orange"></span>
+        <span style="color:var(--accent2)">Adzuna</span>
+        <span class="status-dot ok"></span>
+      </div>
+      <div class="key-hint">Aggregates 1000+ job sites including startups</div>
+    </div>
+    <div class="key-block">
+      <div class="key-label">
+        <span class="src-dot dot-purple" style="background:#a78bfa"></span>
+        <span style="color:#a78bfa">Gemini AI</span>
+        <span class="status-dot ok"></span>
+      </div>
+      <div class="key-hint">AI enrichment: descriptions, skills, relevance scoring</div>
+    </div>
+    <div class="key-block">
+      <div class="key-label">
+        <span class="src-dot dot-green"></span>
+        <span style="color:var(--green)">RemoteOK</span>
+        <span class="status-dot ok"></span>
+      </div>
+      <div class="key-hint">Public API · Real-time remote jobs from startups worldwide</div>
+    </div>
+  </div>
+</div>
+
+<!-- SEARCH FORM -->
+<div class="sec-label">// Search Parameters</div>
+<div class="form-panel">
+  <div class="form-grid">
+    <div class="field field-2">
+      <label>Role / Keywords *</label>
+      <input id="q" type="text" placeholder="ML Engineer, SWE Intern, Data Scientist, Product Manager…" list="roles-dl"/>
+      <datalist id="roles-dl">
+        <option value="Software Engineer Intern"/>
+        <option value="Machine Learning Engineer"/>
+        <option value="Data Scientist"/>
+        <option value="Frontend Developer"/>
+        <option value="Backend Developer"/>
+        <option value="Full Stack Developer"/>
+        <option value="DevOps Engineer"/>
+        <option value="Research Intern"/>
+        <option value="Data Analyst"/>
+        <option value="AI Engineer"/>
+        <option value="Computer Vision Engineer"/>
+        <option value="NLP Engineer"/>
+        <option value="MLOps Engineer"/>
+      </datalist>
+    </div>
+
+    <div class="field">
+      <label>Experience Level</label>
+      <select id="level">
+        <option value="internship">Internship / Fresher</option>
+        <option value="entry">Entry Level (0–2 yrs)</option>
+        <option value="mid">Mid Level (2–5 yrs)</option>
+        <option value="senior">Senior (5+ yrs)</option>
+        <option value="">Any Level</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Location</label>
+      <input id="loc" type="text" placeholder="Remote, India, San Francisco, London…"/>
+    </div>
+
+    <div class="field">
+      <label>Skills (comma-separated)</label>
+      <input id="skills" type="text" placeholder="Python, PyTorch, React, AWS…"/>
+    </div>
+
+    <div class="field">
+      <label>Salary Min (USD/yr, optional)</label>
+      <input id="salary-min" type="number" placeholder="e.g. 80000"/>
+    </div>
+
+    <div class="field">
+      <label>Job Type</label>
+      <select id="jtype">
+        <option value="">Any</option>
+        <option value="fulltime">Full-time</option>
+        <option value="parttime">Part-time</option>
+        <option value="intern">Internship</option>
+        <option value="contract">Contract</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Country (for Adzuna)</label>
+      <select id="country">
+        <option value="in">India</option>
+        <option value="us">United States</option>
+        <option value="gb">United Kingdom</option>
+        <option value="au">Australia</option>
+        <option value="ca">Canada</option>
+        <option value="de">Germany</option>
+        <option value="sg">Singapore</option>
+        <option value="ae">UAE</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Results per source</label>
+      <select id="per-page">
+        <option value="10">10</option>
+        <option value="20" selected>20</option>
+        <option value="30">30</option>
+        <option value="50">50</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- SOURCE TOGGLES -->
+  <div style="margin-top:16px">
+    <div class="key-label" style="margin-bottom:8px">Active Sources</div>
+    <div class="source-toggles">
+      <button class="src-toggle on" data-src="jsearch" onclick="toggleSrc(this)">
+        <span class="src-dot dot-cyan"></span> JSearch (LinkedIn/Indeed/Glassdoor)
+      </button>
+      <button class="src-toggle on" data-src="adzuna" onclick="toggleSrc(this)">
+        <span class="src-dot dot-orange"></span> Adzuna (1000+ sites)
+      </button>
+      <button class="src-toggle on" data-src="remoteok" onclick="toggleSrc(this)">
+        <span class="src-dot dot-green"></span> RemoteOK (Startups)
+      </button>
+      <button class="src-toggle on" data-src="gemini" onclick="toggleSrc(this)">
+        <span class="src-dot" style="background:#a78bfa"></span> Gemini AI Enrichment
+      </button>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-primary" id="btn-search" onclick="doSearch(true)">▶ HUNT JOBS</button>
+    <button class="btn btn-outline" id="btn-more" style="display:none" onclick="doSearch(false)">+ Load More</button>
+    <button class="btn btn-ghost" id="btn-clear" style="display:none" onclick="clearAll()">✕ Clear</button>
+  </div>
+
+  <div class="progress-wrap" id="prog-wrap">
+    <div class="progress-track"><div class="progress-fill" id="prog-fill"></div></div>
+    <div class="progress-steps" id="prog-steps"></div>
+  </div>
+
+  <div class="status-bar" id="status-bar"></div>
+  <div class="rate-warn" id="rate-warn">⚠ Approaching API rate limits. Results saved — wait a moment and try again.</div>
+  <div class="dedup-note" id="dedup-note"></div>
+  <div class="save-note" id="save-note">💾 Results auto-saved to browser storage.</div>
+</div>
+
+<!-- RESULTS -->
+<div class="tabs">
+  <button class="tab active" id="tab-r" onclick="switchTab('r')">Results <span id="rc">(0)</span></button>
+  <button class="tab" id="tab-s" onclick="switchTab('s')">★ Saved <span id="sc">(0)</span></button>
+</div>
+
+<div class="stats-row" id="stats-row">
+  <span class="stat-chip">Total: <span class="stat-val" id="st-total">0</span></span>
+  <span class="stat-chip">Saved: <span class="stat-val" id="st-saved">0</span></span>
+  <span class="stat-chip" id="st-jsearch-chip" style="display:none">JSearch: <span class="stat-val" id="st-jsearch">0</span></span>
+  <span class="stat-chip" id="st-adzuna-chip" style="display:none">Adzuna: <span class="stat-val" id="st-adzuna">0</span></span>
+  <span class="stat-chip" id="st-remoteok-chip" style="display:none">RemoteOK: <span class="stat-val" id="st-remoteok">0</span></span>
+  <span class="stat-chip" id="st-gemini-chip" style="display:none">Gemini AI: <span class="stat-val" id="st-gemini-cnt">0</span></span>
+</div>
+
+<div class="filter-bar" id="filter-bar">
+  <button class="filter-btn active" data-f="all" onclick="filterBy(this,'all')">All</button>
+  <button class="filter-btn" data-f="JSearch" onclick="filterBy(this,'JSearch')">JSearch</button>
+  <button class="filter-btn" data-f="Adzuna" onclick="filterBy(this,'Adzuna')">Adzuna</button>
+  <button class="filter-btn" data-f="RemoteOK" onclick="filterBy(this,'RemoteOK')">RemoteOK</button>
+  <button class="filter-btn" data-f="Gemini" onclick="filterBy(this,'Gemini')">Gemini AI</button>
+</div>
+
+<div class="cards" id="cards">
+  <div class="empty"><div class="empty-icon">⚡</div>Select your filters and hit HUNT JOBS to get started</div>
+</div>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

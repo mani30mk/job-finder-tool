@@ -3,7 +3,11 @@ const SK = 'huntr_v1';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let state = { jobs:[], saved:{}, page:1, hasMore:false, activeTab:'r', activeFilter:'all' };
-let activeSources = { jsearch:true, adzuna:true, remoteok:true, gemini:true };
+let activeSources = { 
+  jsearch:true, adzuna:true, remoteok:true, 
+  linkedin:true, indeed:true, wellfound:true,
+  greenhouse:true, lever:true, hn:true, wwr:true
+};
 
 function persist(){ try{ localStorage.setItem(SK, JSON.stringify(state)); }catch(e){} }
 function restore(){
@@ -19,7 +23,6 @@ function restore(){
     }
     updateCounts();
   }catch(e){}
-  // Init resume module
   if(typeof initResume === 'function') initResume();
 }
 
@@ -55,174 +58,42 @@ function updateCounts(){
   // per-source counts
   const cnts = {};
   state.jobs.forEach(j => { cnts[j._src] = (cnts[j._src]||0)+1; });
-  ['JSearch','Adzuna','RemoteOK','Gemini'].forEach(src => {
-    const chip = document.getElementById('st-'+src.toLowerCase().replace(' ','-')+'-chip');
-    const val = document.getElementById('st-'+src.toLowerCase().replace(' ','-')+ (src==='Gemini'?'-cnt':''));
+  ['JSearch','Adzuna','RemoteOK','LinkedIn','Indeed','Wellfound','Greenhouse','Lever','HackerNews','WeWorkRemotely','Gemini'].forEach(src => {
+    const chip = document.getElementById('st-'+src.toLowerCase().replace(/[^a-z]/g,'')+'-chip');
+    const val = document.getElementById('st-'+src.toLowerCase().replace(/[^a-z]/g,'')+'-cnt');
     if(val) val.textContent = cnts[src]||0;
     if(chip) chip.style.display = cnts[src] ? '' : 'none';
   });
 }
 
-// ── Source APIs (via serverless proxies) ──────────────────────────────────────
+// ── Unified API Call ──────────────────────────────────────────────────────────
+async function fetchUnifiedJobs(query, location, level, country, page) {
+  const active = Object.entries(activeSources)
+    .filter(([k,v]) => v)
+    .map(([k]) => k)
+    .join(',');
 
-// JSearch (RapidAPI) — scrapes LinkedIn, Indeed, Glassdoor, ZipRecruiter
-async function fetchJSearch(query, location, employmentType, remoteOnly, page){
-  let q = query;
-  if(location && !remoteOnly) q += ' ' + location;
-  const params = new URLSearchParams({
-    query: q,
-    page: page,
-    num_pages: '1',
-    date_posted: 'month',
-    ...(remoteOnly ? {remote_jobs_only:'true'} : {}),
-    ...(employmentType ? {employment_types: employmentType.toUpperCase()} : {})
-  });
-  const res = await fetch('/api/jsearch?' + params);
-  if(!res.ok){
-    const err = await res.json().catch(()=>({}));
-    throw new Error(err.error || `JSearch HTTP ${res.status}`);
-  }
-  const d = await res.json();
-  return (d.data||[]).map(j => ({
-    _src: 'JSearch',
-    _id: 'js-' + j.job_id,
-    title: j.job_title,
-    company: j.employer_name,
-    location: j.job_city ? `${j.job_city}, ${j.job_country||''}` : (j.job_is_remote ? 'Remote' : j.job_country||''),
-    type: j.job_employment_type ? j.job_employment_type.replace('_',' ') : '',
-    posted: j.job_posted_at_datetime_utc ? j.job_posted_at_datetime_utc.slice(0,10) : '',
-    url: j.job_apply_link || j.job_google_link || '',
-    linkedin_url: '',
-    salary: j.job_min_salary ? `$${Math.round(j.job_min_salary/1000)}k–$${Math.round((j.job_max_salary||j.job_min_salary)/1000)}k` : '',
-    description: j.job_description ? j.job_description.slice(0,300) + '…' : '',
-    skills: j.job_required_skills || [],
-    source_logo: j.employer_logo || '',
-    _verified_url: true
-  }));
-}
-
-// Adzuna — aggregates company sites, boards, startups
-async function fetchAdzuna(query, country, location, salaryMin, page){
   const params = new URLSearchParams({
     query: query,
-    country: country,
-    page: page,
-    ...(location ? {location: location} : {}),
-    ...(salaryMin ? {salary_min: salaryMin} : {})
+    page: page.toString(),
+    source: active
   });
-  const res = await fetch('/api/adzuna?' + params);
+  if(location) params.append('location', location);
+  if(level) params.append('level', level);
+  if(country) params.append('country', country);
+
+  const res = await fetch('/api/jobs?' + params);
   if(!res.ok){
     const err = await res.json().catch(()=>({}));
-    throw new Error(err.error || `Adzuna HTTP ${res.status}`);
+    throw new Error(err.error || `API HTTP ${res.status}`);
   }
   const d = await res.json();
-  return (d.results||[]).map(j => ({
-    _src: 'Adzuna',
-    _id: 'az-' + j.id,
-    title: j.title,
-    company: j.company?.display_name || 'Unknown',
-    location: j.location?.display_name || '',
-    type: j.contract_time ? (j.contract_time==='full_time'?'Full-time':'Part-time') : '',
-    posted: j.created ? j.created.slice(0,10) : '',
-    url: j.redirect_url || '',
-    linkedin_url: '',
-    salary: j.salary_min ? `£${Math.round(j.salary_min/1000)}k–£${Math.round((j.salary_max||j.salary_min)/1000)}k` : '',
-    description: j.description ? j.description.slice(0,300) + '…' : '',
-    skills: [],
-    _verified_url: true
-  }));
-}
-
-// RemoteOK — free public API, real-time remote jobs from startups
-async function fetchRemoteOK(query){
-  const res = await fetch('https://remoteok.com/api', {
-    headers:{ 'User-Agent': 'HUNTR Job Finder (personal use)' }
-  });
-  if(!res.ok) throw new Error(`RemoteOK HTTP ${res.status}`);
-  const d = await res.json();
-  const jobs = (Array.isArray(d) ? d : []).filter(j => j.slug); // skip header entry
-  const q = query.toLowerCase();
-  return jobs
-    .filter(j => {
-      const text = ((j.position||'') + ' ' + (j.tags||[]).join(' ') + ' ' + (j.company||'')).toLowerCase();
-      return q.split(' ').some(word => word.length>2 && text.includes(word));
-    })
-    .slice(0, 20)
-    .map(j => ({
-      _src: 'RemoteOK',
-      _id: 'ro-' + j.id,
-      title: j.position || j.slug,
-      company: j.company || 'Unknown',
-      location: 'Remote',
-      type: 'Full-time',
-      posted: j.date ? j.date.slice(0,10) : '',
-      url: j.url || `https://remoteok.com/remote-jobs/${j.slug}`,
-      linkedin_url: '',
-      salary: j.salary || '',
-      description: j.description ? j.description.replace(/<[^>]+>/g,'').slice(0,300) + '…' : '',
-      skills: j.tags || [],
-      _verified_url: true
-    }));
-}
-
-// Gemini — AI fallback + enrichment (via serverless proxy)
-async function geminiSearch(query, level, location, skills, page){
-  const levelMap = {internship:'internship/fresher',entry:'entry-level 0-2yr',mid:'mid-level 2-5yr',senior:'senior 5+yr','':'any level'};
-  const lv = levelMap[level]||'any level';
-  const pageHint = page>1 ? `Page ${page}: find DIFFERENT jobs not in previous pages.` : '';
-  const prompt = `You are a job search assistant. Use Google Search to find REAL current job postings (last 30 days).
-
-Search: "${query}" ${lv} jobs${location?' in '+location:''}${skills?', skills: '+skills:''}.
-${pageHint}
-
-Search sources: LinkedIn, Greenhouse.io, Lever.co, Workday, Wellfound/AngelList, company career pages.
-
-Return ONLY a valid JSON array with 6 objects. No prose, no markdown:
-[{"title":"","company":"","location":"","type":"Internship|Full-time|Contract","posted":"YYYY-MM-DD","url":"ONLY use the exact URL you found — never invent one. Use company careers page if specific URL unknown.","skills":[""],"description":"2-3 sentences","salary":"","source":"LinkedIn|Greenhouse|Lever|Company Career Page|Wellfound"}]
-
-RULES: Never fabricate numeric job IDs. Prefer greenhouse.io, lever.co, workday URLs. If no verified URL found, use https://careers.[company].com or leave empty.`;
-
-  const body = {
-    contents:[{role:'user',parts:[{text:prompt}]}],
-    generationConfig:{ temperature:0.15, maxOutputTokens:2500 },
-    tools:[{google_search:{}}]
+  return {
+    jobs: d.jobs || [],
+    total: d.total || 0,
+    hasMore: d.hasMore || false,
+    errors: d.errors || []
   };
-  
-  let d;
-  if(typeof callGemini === 'function'){
-    d = await callGemini(body);
-  } else {
-    // Fallback if resume.js isn't loaded for some reason
-    const res = await fetch('/api/gemini', {
-      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
-    });
-    if(!res.ok){
-      const e = await res.json().catch(()=>({}));
-      throw new Error(e.error || `HTTP ${res.status}`);
-    }
-    d = await res.json();
-  }
-  
-  const text = d?.candidates?.[0]?.content?.parts?.[0]?.text||'';
-  const m = text.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/) || text.match(/(\[[\s\S]*\])/);
-  if(!m) return [];
-  try{
-    return JSON.parse(m[1]).map((j,i) => ({
-      _src: 'Gemini',
-      _id: 'gm-' + Date.now() + i,
-      title: j.title||'',
-      company: j.company||'',
-      location: j.location||'',
-      type: j.type||'',
-      posted: j.posted||'',
-      url: j.url||'',
-      linkedin_url: '',
-      salary: j.salary||'',
-      description: j.description||'',
-      skills: j.skills||[],
-      _verified_url: false // Gemini URLs still need validation
-    }));
-  }catch(e){ return []; }
 }
 
 // ── Deduplication ─────────────────────────────────────────────────────────────
@@ -257,108 +128,72 @@ async function doSearch(fresh){
   btn.disabled=true; btn.textContent='⏳ HUNTING…';
   hideEl('btn-more');
 
-  const STEPS = ['JSearch','Adzuna','RemoteOK','Gemini AI','Merging'];
+  const STEPS = ['Searching Internet...','Parsing Results...','AI Scoring...','Merging','Done'];
   setProgress(5, STEPS, 0);
-  setStatus('Fetching from all sources simultaneously…','info');
+  setStatus('Searching 10+ job sources across the internet...','info');
 
-  let allJobs = [];
-  let sourceErrors = [];
+  try {
+    // Single unified API call gets ALL sources
+    const result = await fetchUnifiedJobs(q, loc, level, country, page);
 
-  // ── Parallel fetch from all sources ──────────────────────────────────────
-  const promises = [];
+    setProgress(50, STEPS, 1);
 
-  if(activeSources.jsearch){
-    promises.push(
-      fetchJSearch(q, loc, jtype, isRemote, page)
-        .then(jobs => { allJobs.push(...jobs); setProgress(30, STEPS, 1); })
-        .catch(e => { sourceErrors.push(`JSearch: ${e.message}`); })
+    let jobs = result.jobs;
+
+    // ── AI Scoring against profile ──────────────────────────────────────
+    if(profile && jobs.length > 0 && typeof scoreJobsWithProfile === 'function'){
+      setStatus('⚡ Scoring jobs against your profile...','info');
+      setProgress(75, STEPS, 2);
+      try{
+        jobs = await scoreJobsWithProfile(jobs, profile);
+        jobs.sort((a,b) => (b._score||50) - (a._score||50));
+      } catch(e){ /* keep unscored */ }
+    }
+
+    // Mark new jobs
+    jobs.forEach(j => { if(typeof isNewJob==='function') j._isNew = isNewJob(j.posted); });
+
+    if(fresh) state.jobs = jobs;
+    else state.jobs = dedup([...state.jobs, ...jobs]);
+
+    state.page = page + 1;
+    state.hasMore = result.hasMore;
+    persist();
+
+    // Save daily date
+    if(typeof saveDailyDate === 'function') saveDailyDate();
+    if(typeof checkDailyUpdate === 'function') checkDailyUpdate();
+
+    setProgress(100, STEPS, 4);
+    setTimeout(hideProgress, 700);
+
+    btn.disabled=false; btn.textContent='▶ HUNT JOBS';
+
+    const srcCounts = {};
+    jobs.forEach(j => { srcCounts[j._src] = (srcCounts[j._src]||0)+1; });
+    const summary = Object.entries(srcCounts).map(([s,c])=>`${c} from ${s}`).join(', ');
+
+    const scoreNote = profile ? ' AI-scored against your profile.' : '';
+    setStatus(
+      jobs.length
+        ? `✓ Found ${jobs.length} jobs${fresh?'':' more'} — ${summary}.${scoreNote}${result.errors?.length?' Some sources skipped.':''}`
+        : `No results. Try broader keywords or remove location filter.`,
+      jobs.length ? 'ok' : 'warn'
     );
+
+    showEl('btn-clear'); showEl('save-note');
+    document.getElementById('stats-row').style.display='flex';
+    document.getElementById('filter-bar').style.display='flex';
+    if(state.hasMore) showEl('btn-more'); else hideEl('btn-more');
+
+    renderCards(); updateCounts();
+
+  } catch(e) {
+    btn.disabled=false; btn.textContent='▶ HUNT JOBS';
+    hideProgress();
+    setStatus('Error: ' + e.message, 'err');
+    console.error('[HUNTR] Search error:', e);
   }
-
-  if(activeSources.adzuna){
-    promises.push(
-      fetchAdzuna(q, country, loc, salaryMin, page)
-        .then(jobs => { allJobs.push(...jobs); setProgress(55, STEPS, 2); })
-        .catch(e => { sourceErrors.push(`Adzuna: ${e.message}`); })
-    );
-  }
-
-  if(activeSources.remoteok){
-    promises.push(
-      fetchRemoteOK(q)
-        .then(jobs => { allJobs.push(...jobs); setProgress(70, STEPS, 3); })
-        .catch(e => { sourceErrors.push(`RemoteOK: ${e.message}`); })
-    );
-  }
-
-  if(activeSources.gemini){
-    promises.push(
-      geminiSearch(q, level, loc, skills, page)
-        .then(jobs => { allJobs.push(...jobs); setProgress(85, STEPS, 4); })
-        .catch(e => { sourceErrors.push(`Gemini: ${e.message}`); })
-    );
-  }
-
-  await Promise.allSettled(promises);
-
-  setProgress(95, STEPS, 4);
-
-  // ── Dedup & merge ────────────────────────────────────────────────────────
-  const before = allJobs.length;
-  let deduped = dedup(allJobs);
-  const removed = before - deduped.length;
-
-  // ── AI Scoring against profile ──────────────────────────────────────────
-  if(profile && deduped.length > 0 && typeof scoreJobsWithProfile === 'function'){
-    setStatus('⚡ Scoring jobs against your profile…','info');
-    try{
-      deduped = await scoreJobsWithProfile(deduped, profile);
-      deduped.sort((a,b) => (b._score||50) - (a._score||50));
-    } catch(e){ /* keep unscored */ }
-  }
-
-  // Mark new jobs
-  deduped.forEach(j => { if(typeof isNewJob==='function') j._isNew = isNewJob(j.posted); });
-
-  if(fresh) state.jobs = deduped;
-  else state.jobs = dedup([...state.jobs, ...deduped]);
-
-  state.page = page + 1;
-  state.hasMore = allJobs.length >= 15;
-  persist();
-
-  // Save daily date
-  if(typeof saveDailyDate === 'function') saveDailyDate();
-  if(typeof checkDailyUpdate === 'function') checkDailyUpdate();
-
-  setProgress(100, STEPS, 5);
-  setTimeout(hideProgress, 700);
-
-  btn.disabled=false; btn.textContent='▶ HUNT JOBS';
-
-  const srcCounts = {};
-  deduped.forEach(j => { srcCounts[j._src] = (srcCounts[j._src]||0)+1; });
-  const summary = Object.entries(srcCounts).map(([s,c])=>`${c} from ${s}`).join(', ');
-
-  const scoreNote = profile ? ' AI-scored against your profile.' : '';
-  setStatus(
-    deduped.length
-      ? `✓ Found ${deduped.length} jobs${fresh?'':' more'} — ${summary}.${scoreNote}${sourceErrors.length?' Some sources skipped.':''}`
-      : `No results. ${sourceErrors.join(' | ')}`,
-    deduped.length ? 'ok' : 'warn'
-  );
-
-  if(removed>0){
-    const dn = document.getElementById('dedup-note');
-    dn.style.display=''; dn.textContent=`✦ ${removed} duplicate${removed>1?'s':''} removed across sources`;
-  }
-
-  showEl('btn-clear'); showEl('save-note');
-  document.getElementById('stats-row').style.display='flex';
-  document.getElementById('filter-bar').style.display='flex';
-  if(state.hasMore) showEl('btn-more'); else hideEl('btn-more');
-
-  renderCards(); updateCounts();
 }
 
 // ── Render ─────────────────────────────────────────────────────────────────────
@@ -397,7 +232,13 @@ function fallbackLinks(j){
 }
 
 function srcBadgeClass(src){
-  return {JSearch:'b-jsearch',Adzuna:'b-adzuna',RemoteOK:'b-remoteok',Gemini:'b-gemini'}[src]||'b-type';
+  const map = {
+    'JSearch':'b-jsearch', 'Adzuna':'b-adzuna', 'RemoteOK':'b-remoteok',
+    'LinkedIn':'b-linkedin', 'Indeed':'b-indeed', 'Wellfound':'b-wellfound',
+    'Greenhouse':'b-greenhouse', 'Lever':'b-lever', 'HackerNews':'b-hn',
+    'WeWorkRemotely':'b-wwr', 'Gemini':'b-gemini'
+  };
+  return map[src] || 'b-type';
 }
 
 function cardHTML(j, i){

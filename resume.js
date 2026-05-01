@@ -17,7 +17,7 @@ async function callGemini(body){
     });
     if(res.ok) return await res.json();
   } catch(e){}
-  
+
   // Fallback: direct API call with localStorage key (if set via console for local dev)
   const key = localStorage.getItem(LOCAL_KEY_SK);
   if(!key) throw new Error('Could not connect to Gemini AI. Make sure you are testing on Vercel, or set the API key locally.');
@@ -202,21 +202,51 @@ function showProfileBanner(p){
   document.getElementById('profile-meta-info').innerHTML = meta.map(m=>'<span>'+m+'</span>').join('');
 }
 
+// ── FIXED: autoFillFromProfile ──────────────────────────────────────────────
 function autoFillFromProfile(p){
   if(!p) return;
-  document.getElementById('q').value = (p.search_keywords || p.target_roles || []).slice(0,4).join(', ');
+
+  // Use only 1-2 BROAD keywords for better search results
+  const keywords = p.search_keywords || p.target_roles || [];
+
+  let searchQuery = '';
+  if(p.target_roles && p.target_roles.length > 0){
+    // Use the first target role but simplify it (remove "Intern" if present for broader search)
+    const role = p.target_roles[0].replace(/\s*Intern\s*/i, '').replace(/\s*Entry[- ]?Level\s*/i, '').trim();
+    searchQuery = role || keywords[0] || 'software engineer';
+  } else if(keywords.length > 0){
+    // Use first 1-2 keywords, cleaned (no commas)
+    searchQuery = keywords.slice(0, 2).join(' ').replace(/,/g, '');
+  } else {
+    searchQuery = 'software engineer';
+  }
+
+  document.getElementById('q').value = searchQuery;
+
   if(p.level) document.getElementById('level').value = p.level;
-  if(p.location) document.getElementById('loc').value = p.location;
-  const allSkills = [...(p.skills?.languages||[]),...(p.skills?.frameworks||[]),...(p.skills?.tools||[])];
-  document.getElementById('skills').value = allSkills.slice(0,8).join(', ');
+
+  // Location: if Trichy/very specific small city, default to "Remote" for better results
   if(p.location){
     const loc = p.location.toLowerCase();
+    // If it's a small Indian city, suggest Remote for better results
+    if(loc.includes('trichy') || loc.includes('coimbatore') || loc.includes('madurai') || 
+       loc.includes('salem') || loc.includes('erode') || loc.includes('tiruchirappalli')){
+      document.getElementById('loc').value = 'Remote';
+    } else {
+      document.getElementById('loc').value = p.location;
+    }
+
     if(loc.includes('india')) document.getElementById('country').value = 'in';
     else if(loc.includes('us')||loc.includes('america')) document.getElementById('country').value = 'us';
     else if(loc.includes('uk')||loc.includes('london')) document.getElementById('country').value = 'gb';
     else if(loc.includes('australia')) document.getElementById('country').value = 'au';
     else if(loc.includes('canada')) document.getElementById('country').value = 'ca';
   }
+
+  // Skills: use top 3-4 only, no commas
+  const allSkills = [...(p.skills?.languages||[]),...(p.skills?.frameworks||[]),...(p.skills?.tools||[])];
+  document.getElementById('skills').value = allSkills.slice(0,4).join(' ');
+
   if(p.level === 'internship') document.getElementById('jtype').value = 'intern';
 }
 

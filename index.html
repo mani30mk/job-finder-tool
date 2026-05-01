@@ -1,280 +1,264 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>HUNTR — AI Job Finder</title>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=Bebas+Neue&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet"/>
-<link rel="stylesheet" href="style.css"/>
-<!-- PDF.js for client-side resume text extraction -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HUNTR — AI Job Finder</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
-<header>
-  <div class="logo">
-    <div>
-      <div class="logo-text">HUNTR</div>
-      <div class="logo-sub">Resume-Powered AI Job Engine</div>
+  <header>
+    <div class="logo">
+      <div>
+        <div class="logo-text">HUNTR</div>
+        <div class="logo-sub">RESUME-POWERED AI JOB ENGINE</div>
+      </div>
     </div>
-  </div>
-  <div class="header-pills">
-    <span class="pill pill-cyan">JSearch</span>
-    <span class="pill pill-orange">Adzuna</span>
-    <span class="pill pill-green">RemoteOK</span>
-    <span class="pill" style="background:rgba(167,139,250,.1);color:#a78bfa;border:1px solid rgba(167,139,250,.2)">Gemini AI</span>
-  </div>
-</header>
-
-<main>
-
-<!-- RESUME UPLOAD (visible only before profile is saved) -->
-<div id="resume-upload-section">
-  <div class="sec-label">// Upload Your Resume — one-time setup, searches forever</div>
-  <div class="resume-card">
-    <div class="upload-zone" id="upload-zone">
-      <input type="file" id="resume-file" accept=".pdf,.txt" onchange="onFileSelect(event)"/>
-      <div class="upload-icon">📄</div>
-      <div class="upload-title">Drop your resume here</div>
-      <div class="upload-sub">PDF or TXT — AI will extract your skills, experience & target roles</div>
-      <div class="upload-file-name" id="file-name" style="display:none"></div>
+    <div class="header-pills">
+      <span class="pill pill-cyan">V2.0 UNIVERSAL</span>
+      <span class="pill pill-orange">10+ SOURCES</span>
+      <span class="pill pill-green">AI SCORING</span>
     </div>
-    <div class="resume-actions">
-      <button class="btn btn-primary" id="btn-parse" onclick="startParse()" disabled>⚡ Parse Resume with AI</button>
-    </div>
-    <div class="resume-progress" id="resume-progress" style="display:none">
-      <div class="progress-track"><div class="progress-fill" id="resume-prog-fill" style="width:0%"></div></div>
-      <div class="resume-prog-label" id="resume-prog-label">Extracting text…</div>
-    </div>
-    <div class="status-bar" id="resume-status" style="display:none"></div>
-  </div>
-</div>
+  </header>
 
-<!-- PROFILE BANNER (shown after resume is parsed) -->
-<div id="profile-banner" style="display:none">
-  <div class="sec-label">// Your Profile — <span id="profile-parsed-date"></span></div>
-  <div class="profile-card">
-    <div class="profile-top">
-      <div class="profile-info">
-        <div class="profile-avatar" id="profile-avatar"></div>
-        <div>
-          <div class="profile-name" id="profile-name"></div>
-          <div class="profile-role" id="profile-role"></div>
+  <main>
+    <!-- RESUME UPLOAD SECTION -->
+    <div class="resume-card" id="resume-upload-section">
+      <div class="sec-label">// Upload Your Resume — one-time setup, searches forever</div>
+      <div class="upload-zone" id="upload-zone">
+        <input type="file" id="file-input" accept=".pdf,.txt" onchange="onFileSelect(event)">
+        <div class="upload-icon">📄</div>
+        <div class="upload-title">Drop your resume here</div>
+        <div class="upload-sub">PDF or TXT — AI will extract your skills, experience & target roles</div>
+        <div class="upload-file-name" id="file-name" style="display:none"></div>
+      </div>
+      <div class="resume-actions">
+        <button class="btn btn-primary" id="btn-parse" onclick="startParse()" disabled>⚡ Parse Resume with AI</button>
+      </div>
+      <div class="resume-progress" id="resume-progress" style="display:none">
+        <div class="progress-track"><div class="progress-fill" id="resume-prog-fill" style="width:0%"></div></div>
+        <div class="resume-prog-label" id="resume-prog-label"></div>
+      </div>
+      <div class="status-bar" id="resume-status" style="display:none"></div>
+    </div>
+
+    <!-- PROFILE BANNER -->
+    <div class="profile-card" id="profile-banner" style="display:none">
+      <div class="profile-top">
+        <div class="profile-info">
+          <div class="profile-avatar" id="profile-avatar">U</div>
+          <div>
+            <div class="profile-name" id="profile-name">Unknown</div>
+            <div class="profile-role" id="profile-role">Professional</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:2px" id="profile-parsed-date"></div>
+          </div>
+        </div>
+        <div class="profile-actions">
+          <button class="btn btn-primary" onclick="huntFromProfile()">🔍 Hunt Today's Jobs</button>
+          <button class="btn btn-ghost" onclick="resetProfile()">↻ Re-upload Resume</button>
         </div>
       </div>
-      <div class="profile-actions">
-        <button class="btn btn-primary" onclick="huntFromProfile()">🔍 Hunt Today's Jobs</button>
-        <button class="btn-sm" onclick="resetProfile()">↺ Re-upload Resume</button>
+      <div class="profile-skills" id="profile-skills"></div>
+      <div class="profile-keywords" id="profile-keywords"></div>
+      <div class="profile-meta-info" id="profile-meta-info"></div>
+    </div>
+
+    <!-- DAILY BANNER -->
+    <div class="daily-card" id="daily-banner" style="display:none">
+      <div>
+        <div class="daily-text"><span class="daily-dot"></span><span id="daily-message"></span></div>
+        <div class="daily-sub" id="daily-sub"></div>
+      </div>
+      <button class="btn btn-outline" onclick="doSearch(true)">↻ Refresh Now</button>
+    </div>
+
+    <!-- API STATUS -->
+    <div class="sec-label">// Connected Sources — API keys configured on server</div>
+    <div class="keys-panel">
+      <div class="keys-grid">
+        <div class="key-block">
+          <div class="key-label"><span class="src-dot dot-cyan"></span> JSEARCH</div>
+          <div class="key-hint">Scrapes LinkedIn, Indeed, Glassdoor, ZipRecruiter</div>
+        </div>
+        <div class="key-block">
+          <div class="key-label"><span class="src-dot dot-orange"></span> ADZUNA</div>
+          <div class="key-hint">Aggregates 1000+ job sites including startups</div>
+        </div>
+        <div class="key-block">
+          <div class="key-label"><span class="src-dot dot-purple"></span> GEMINI AI</div>
+          <div class="key-hint">AI enrichment: descriptions, skills, relevance scoring</div>
+        </div>
+        <div class="key-block">
+          <div class="key-label"><span class="src-dot dot-green"></span> REMOTEOK</div>
+          <div class="key-hint">Public API · Real-time remote jobs from startups worldwide</div>
+        </div>
+        <div class="key-block">
+          <div class="key-label"><span class="src-dot" style="background:#5299d3"></span> LINKEDIN</div>
+          <div class="key-hint">Public job search — no auth required</div>
+        </div>
+        <div class="key-block">
+          <div class="key-label"><span class="src-dot" style="background:#ff8c00"></span> INDEED</div>
+          <div class="key-hint">Worldwide job listings</div>
+        </div>
+        <div class="key-block">
+          <div class="key-label"><span class="src-dot" style="background:#ff4500"></span> WELLFOUND</div>
+          <div class="key-hint">Startup jobs from AngelList</div>
+        </div>
+        <div class="key-block">
+          <div class="key-label"><span class="src-dot" style="background:#228b22"></span> GREENHOUSE</div>
+          <div class="key-hint">Company career pages (Stripe, Airbnb, OpenAI, etc.)</div>
+        </div>
+        <div class="key-block">
+          <div class="key-label"><span class="src-dot" style="background:#4682b4"></span> LEVER</div>
+          <div class="key-hint">Company career pages (Notion, Figma, Vercel, etc.)</div>
+        </div>
+        <div class="key-block">
+          <div class="key-label"><span class="src-dot" style="background:#ff6600"></span> HACKER NEWS</div>
+          <div class="key-hint">Monthly "Who is Hiring" threads</div>
+        </div>
+        <div class="key-block">
+          <div class="key-label"><span class="src-dot" style="background:#008080"></span> WE WORK REMOTELY</div>
+          <div class="key-hint">Remote-only job board</div>
+        </div>
       </div>
     </div>
-    <div class="profile-skills" id="profile-skills"></div>
-    <div class="profile-keywords" id="profile-keywords"></div>
-    <div class="profile-meta-info" id="profile-meta-info"></div>
-  </div>
-</div>
 
-<!-- DAILY REFRESH BANNER -->
-<div id="daily-banner" style="display:none">
-  <div class="daily-card">
-    <div>
-      <div class="daily-text"><span class="daily-dot"></span> <span id="daily-message"></span></div>
-      <div class="daily-sub" id="daily-sub"></div>
-    </div>
-    <button class="btn-sm" onclick="huntFromProfile()">↺ Refresh Now</button>
-  </div>
-</div>
-
-<!-- API SOURCES STATUS -->
-<div class="sec-label">// Connected Sources — API keys configured on server</div>
-<div class="keys-panel">
-  <div class="keys-grid">
-    <div class="key-block">
-      <div class="key-label">
-        <span class="src-dot dot-cyan"></span>
-        <span style="color:var(--accent)">JSearch</span>
-        <span class="status-dot ok"></span>
+    <!-- SEARCH FORM -->
+    <div class="sec-label">// Search Parameters (auto-filled from resume)</div>
+    <div class="form-panel">
+      <div class="form-grid">
+        <div class="field field-2">
+          <label>Role / Keywords *</label>
+          <input type="text" id="q" placeholder="e.g. software engineer, machine learning">
+        </div>
+        <div class="field">
+          <label>Experience Level</label>
+          <select id="level">
+            <option value="">Any</option>
+            <option value="internship">Internship</option>
+            <option value="entry">Entry-level</option>
+            <option value="mid">Mid-level</option>
+            <option value="senior">Senior</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Location</label>
+          <input type="text" id="loc" placeholder="e.g. Remote, India, USA">
+        </div>
+        <div class="field">
+          <label>Skills (comma-separated)</label>
+          <input type="text" id="skills" placeholder="e.g. Python, React, AWS">
+        </div>
+        <div class="field">
+          <label>Salary Min (USD/yr, optional)</label>
+          <input type="number" id="salary-min" placeholder="50000">
+        </div>
+        <div class="field">
+          <label>Job Type</label>
+          <select id="jtype">
+            <option value="">Any</option>
+            <option value="fulltime">Full-time</option>
+            <option value="parttime">Part-time</option>
+            <option value="contract">Contract</option>
+            <option value="intern">Internship</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Country (for Adzuna)</label>
+          <select id="country">
+            <option value="us">United States</option>
+            <option value="gb">United Kingdom</option>
+            <option value="in">India</option>
+            <option value="ca">Canada</option>
+            <option value="au">Australia</option>
+            <option value="de">Germany</option>
+            <option value="fr">France</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Results per source</label>
+          <select id="per-page">
+            <option value="10">10</option>
+            <option value="20" selected>20</option>
+            <option value="50">50</option>
+          </select>
+        </div>
       </div>
-      <div class="key-hint">Scrapes LinkedIn, Indeed, Glassdoor, ZipRecruiter</div>
-    </div>
-    <div class="key-block">
-      <div class="key-label">
-        <span class="src-dot dot-orange"></span>
-        <span style="color:var(--accent2)">Adzuna</span>
-        <span class="status-dot ok"></span>
+
+      <!-- SOURCE TOGGLES -->
+      <div class="source-toggles">
+        <button class="src-toggle on" data-src="jsearch" onclick="toggleSrc(this)">JSearch</button>
+        <button class="src-toggle on" data-src="adzuna" onclick="toggleSrc(this)">Adzuna</button>
+        <button class="src-toggle on" data-src="remoteok" onclick="toggleSrc(this)">RemoteOK</button>
+        <button class="src-toggle on" data-src="linkedin" onclick="toggleSrc(this)">LinkedIn</button>
+        <button class="src-toggle on" data-src="indeed" onclick="toggleSrc(this)">Indeed</button>
+        <button class="src-toggle on" data-src="wellfound" onclick="toggleSrc(this)">Wellfound</button>
+        <button class="src-toggle on" data-src="greenhouse" onclick="toggleSrc(this)">Greenhouse</button>
+        <button class="src-toggle on" data-src="lever" onclick="toggleSrc(this)">Lever</button>
+        <button class="src-toggle on" data-src="hn" onclick="toggleSrc(this)">HackerNews</button>
+        <button class="src-toggle on" data-src="wwr" onclick="toggleSrc(this)">WeWorkRemotely</button>
       </div>
-      <div class="key-hint">Aggregates 1000+ job sites including startups</div>
-    </div>
-    <div class="key-block">
-      <div class="key-label">
-        <span class="src-dot dot-purple" style="background:#a78bfa"></span>
-        <span style="color:#a78bfa">Gemini AI</span>
-        <span class="status-dot ok"></span>
+
+      <div class="actions">
+        <button class="btn btn-primary" id="btn-search" onclick="doSearch(true)">▶ HUNT JOBS</button>
+        <button class="btn btn-outline" id="btn-more" onclick="doSearch(false)" style="display:none">+ LOAD MORE</button>
+        <button class="btn btn-ghost" id="btn-clear" onclick="clearAll()" style="display:none">✕ CLEAR</button>
       </div>
-      <div class="key-hint">AI enrichment: descriptions, skills, relevance scoring</div>
-    </div>
-    <div class="key-block">
-      <div class="key-label">
-        <span class="src-dot dot-green"></span>
-        <span style="color:var(--green)">RemoteOK</span>
-        <span class="status-dot ok"></span>
+
+      <div class="progress-wrap" id="prog-wrap" style="display:none">
+        <div class="progress-track"><div class="progress-fill" id="prog-fill"></div></div>
+        <div class="progress-steps" id="prog-steps"></div>
       </div>
-      <div class="key-hint">Public API · Real-time remote jobs from startups worldwide</div>
-    </div>
-  </div>
-</div>
-
-<!-- SEARCH FORM -->
-<div class="sec-label">// Search Parameters <span style="color:var(--dim);font-size:8px;margin-left:8px">(auto-filled from resume)</span></div>
-<div class="form-panel">
-  <div class="form-grid">
-    <div class="field field-2">
-      <label>Role / Keywords *</label>
-      <input id="q" type="text" placeholder="ML Engineer, SWE Intern, Data Scientist, Product Manager…" list="roles-dl"/>
-      <datalist id="roles-dl">
-        <option value="Software Engineer Intern"/>
-        <option value="Machine Learning Engineer"/>
-        <option value="Data Scientist"/>
-        <option value="Frontend Developer"/>
-        <option value="Backend Developer"/>
-        <option value="Full Stack Developer"/>
-        <option value="DevOps Engineer"/>
-        <option value="Research Intern"/>
-        <option value="Data Analyst"/>
-        <option value="AI Engineer"/>
-        <option value="Computer Vision Engineer"/>
-        <option value="NLP Engineer"/>
-        <option value="MLOps Engineer"/>
-      </datalist>
+      <div class="status-bar" id="status-bar" style="display:none"></div>
+      <div class="rate-warn" id="rate-warn" style="display:none"></div>
+      <div class="dedup-note" id="dedup-note" style="display:none"></div>
+      <div class="save-note" id="save-note" style="display:none">💾 Results auto-saved to browser storage.</div>
     </div>
 
-    <div class="field">
-      <label>Experience Level</label>
-      <select id="level">
-        <option value="internship">Internship / Fresher</option>
-        <option value="entry">Entry Level (0–2 yrs)</option>
-        <option value="mid">Mid Level (2–5 yrs)</option>
-        <option value="senior">Senior (5+ yrs)</option>
-        <option value="">Any Level</option>
-      </select>
+    <!-- RESULTS -->
+    <div class="results-header">
+      <div class="tabs">
+        <button class="tab active" id="tab-r" onclick="switchTab('r')">Results <span id="rc">(0)</span></button>
+        <button class="tab" id="tab-s" onclick="switchTab('s')">Saved <span id="sc">(0)</span></button>
+      </div>
     </div>
 
-    <div class="field">
-      <label>Location</label>
-      <input id="loc" type="text" placeholder="Remote, India, San Francisco, London…"/>
+    <div class="stats-row" id="stats-row" style="display:none">
+      <span class="stat-chip">Total: <span class="stat-val" id="st-total">0</span></span>
+      <span class="stat-chip">Saved: <span class="stat-val" id="st-saved">0</span></span>
+      <span class="stat-chip" id="st-jsearch-chip" style="display:none">JSearch: <span class="stat-val" id="st-jsearch-cnt">0</span></span>
+      <span class="stat-chip" id="st-adzuna-chip" style="display:none">Adzuna: <span class="stat-val" id="st-adzuna-cnt">0</span></span>
+      <span class="stat-chip" id="st-remoteok-chip" style="display:none">RemoteOK: <span class="stat-val" id="st-remoteok-cnt">0</span></span>
+      <span class="stat-chip" id="st-linkedin-chip" style="display:none">LinkedIn: <span class="stat-val" id="st-linkedin-cnt">0</span></span>
+      <span class="stat-chip" id="st-indeed-chip" style="display:none">Indeed: <span class="stat-val" id="st-indeed-cnt">0</span></span>
+      <span class="stat-chip" id="st-wellfound-chip" style="display:none">Wellfound: <span class="stat-val" id="st-wellfound-cnt">0</span></span>
+      <span class="stat-chip" id="st-greenhouse-chip" style="display:none">Greenhouse: <span class="stat-val" id="st-greenhouse-cnt">0</span></span>
+      <span class="stat-chip" id="st-lever-chip" style="display:none">Lever: <span class="stat-val" id="st-lever-cnt">0</span></span>
+      <span class="stat-chip" id="st-hackernews-chip" style="display:none">HN: <span class="stat-val" id="st-hackernews-cnt">0</span></span>
+      <span class="stat-chip" id="st-weworkremotely-chip" style="display:none">WWR: <span class="stat-val" id="st-weworkremotely-cnt">0</span></span>
     </div>
 
-    <div class="field">
-      <label>Skills (comma-separated)</label>
-      <input id="skills" type="text" placeholder="Python, PyTorch, React, AWS…"/>
+    <div class="filter-bar" id="filter-bar" style="display:none">
+      <button class="filter-btn active" data-f="all" onclick="filterBy(this,'all')">All</button>
+      <button class="filter-btn" data-f="JSearch" onclick="filterBy(this,'JSearch')">JSearch</button>
+      <button class="filter-btn" data-f="Adzuna" onclick="filterBy(this,'Adzuna')">Adzuna</button>
+      <button class="filter-btn" data-f="RemoteOK" onclick="filterBy(this,'RemoteOK')">RemoteOK</button>
+      <button class="filter-btn" data-f="LinkedIn" onclick="filterBy(this,'LinkedIn')">LinkedIn</button>
+      <button class="filter-btn" data-f="Indeed" onclick="filterBy(this,'Indeed')">Indeed</button>
+      <button class="filter-btn" data-f="Wellfound" onclick="filterBy(this,'Wellfound')">Wellfound</button>
+      <button class="filter-btn" data-f="Greenhouse" onclick="filterBy(this,'Greenhouse')">Greenhouse</button>
+      <button class="filter-btn" data-f="Lever" onclick="filterBy(this,'Lever')">Lever</button>
+      <button class="filter-btn" data-f="HackerNews" onclick="filterBy(this,'HackerNews')">HN</button>
+      <button class="filter-btn" data-f="WeWorkRemotely" onclick="filterBy(this,'WeWorkRemotely')">WWR</button>
     </div>
 
-    <div class="field">
-      <label>Salary Min (USD/yr, optional)</label>
-      <input id="salary-min" type="number" placeholder="e.g. 80000"/>
-    </div>
+    <div class="cards" id="cards"></div>
+  </main>
 
-    <div class="field">
-      <label>Job Type</label>
-      <select id="jtype">
-        <option value="">Any</option>
-        <option value="fulltime">Full-time</option>
-        <option value="parttime">Part-time</option>
-        <option value="intern">Internship</option>
-        <option value="contract">Contract</option>
-      </select>
-    </div>
-
-    <div class="field">
-      <label>Country (for Adzuna)</label>
-      <select id="country">
-        <option value="in">India</option>
-        <option value="us">United States</option>
-        <option value="gb">United Kingdom</option>
-        <option value="au">Australia</option>
-        <option value="ca">Canada</option>
-        <option value="de">Germany</option>
-        <option value="sg">Singapore</option>
-        <option value="ae">UAE</option>
-      </select>
-    </div>
-
-    <div class="field">
-      <label>Results per source</label>
-      <select id="per-page">
-        <option value="10">10</option>
-        <option value="20" selected>20</option>
-        <option value="30">30</option>
-        <option value="50">50</option>
-      </select>
-    </div>
-  </div>
-
-  <!-- SOURCE TOGGLES -->
-  <div style="margin-top:16px">
-    <div class="key-label" style="margin-bottom:8px">Active Sources</div>
-    <div class="source-toggles">
-      <button class="src-toggle on" data-src="jsearch" onclick="toggleSrc(this)">
-        <span class="src-dot dot-cyan"></span> JSearch (LinkedIn/Indeed/Glassdoor)
-      </button>
-      <button class="src-toggle on" data-src="adzuna" onclick="toggleSrc(this)">
-        <span class="src-dot dot-orange"></span> Adzuna (1000+ sites)
-      </button>
-      <button class="src-toggle on" data-src="remoteok" onclick="toggleSrc(this)">
-        <span class="src-dot dot-green"></span> RemoteOK (Startups)
-      </button>
-      <button class="src-toggle on" data-src="gemini" onclick="toggleSrc(this)">
-        <span class="src-dot" style="background:#a78bfa"></span> Gemini AI Enrichment
-      </button>
-    </div>
-  </div>
-
-  <div class="actions">
-    <button class="btn btn-primary" id="btn-search" onclick="doSearch(true)">▶ HUNT JOBS</button>
-    <button class="btn btn-outline" id="btn-more" style="display:none" onclick="doSearch(false)">+ Load More</button>
-    <button class="btn btn-ghost" id="btn-clear" style="display:none" onclick="clearAll()">✕ Clear</button>
-  </div>
-
-  <div class="progress-wrap" id="prog-wrap">
-    <div class="progress-track"><div class="progress-fill" id="prog-fill"></div></div>
-    <div class="progress-steps" id="prog-steps"></div>
-  </div>
-
-  <div class="status-bar" id="status-bar"></div>
-  <div class="rate-warn" id="rate-warn">⚠ Approaching API rate limits. Results saved — wait a moment and try again.</div>
-  <div class="dedup-note" id="dedup-note"></div>
-  <div class="save-note" id="save-note">💾 Results auto-saved to browser storage.</div>
-</div>
-
-<!-- RESULTS -->
-<div class="tabs">
-  <button class="tab active" id="tab-r" onclick="switchTab('r')">Results <span id="rc">(0)</span></button>
-  <button class="tab" id="tab-s" onclick="switchTab('s')">★ Saved <span id="sc">(0)</span></button>
-</div>
-
-<div class="stats-row" id="stats-row">
-  <span class="stat-chip">Total: <span class="stat-val" id="st-total">0</span></span>
-  <span class="stat-chip">Saved: <span class="stat-val" id="st-saved">0</span></span>
-  <span class="stat-chip" id="st-jsearch-chip" style="display:none">JSearch: <span class="stat-val" id="st-jsearch">0</span></span>
-  <span class="stat-chip" id="st-adzuna-chip" style="display:none">Adzuna: <span class="stat-val" id="st-adzuna">0</span></span>
-  <span class="stat-chip" id="st-remoteok-chip" style="display:none">RemoteOK: <span class="stat-val" id="st-remoteok">0</span></span>
-  <span class="stat-chip" id="st-gemini-chip" style="display:none">Gemini AI: <span class="stat-val" id="st-gemini-cnt">0</span></span>
-</div>
-
-<div class="filter-bar" id="filter-bar">
-  <button class="filter-btn active" data-f="all" onclick="filterBy(this,'all')">All</button>
-  <button class="filter-btn" data-f="JSearch" onclick="filterBy(this,'JSearch')">JSearch</button>
-  <button class="filter-btn" data-f="Adzuna" onclick="filterBy(this,'Adzuna')">Adzuna</button>
-  <button class="filter-btn" data-f="RemoteOK" onclick="filterBy(this,'RemoteOK')">RemoteOK</button>
-  <button class="filter-btn" data-f="Gemini" onclick="filterBy(this,'Gemini')">Gemini AI</button>
-</div>
-
-<div class="cards" id="cards">
-  <div class="empty"><div class="empty-icon">📄</div>Upload your resume above to get started — AI will find jobs matched to your skills</div>
-</div>
-
-</main>
-
-<script src="resume.js"></script>
-<script src="app.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="app.js"></script>
+  <script src="resume.js"></script>
 </body>
 </html>

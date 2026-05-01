@@ -9,13 +9,6 @@ let selectedFile = null;
 const LOCAL_KEY_SK = 'huntr_gemini_key'; // fallback for local dev
 
 // ── Gemini API helper (server proxy with local fallback) ──────────────────────
-function saveGeminiKey(){
-  const k = document.getElementById('gemini-key-input')?.value?.trim();
-  if(!k){ alert('Paste your Gemini API key first.'); return; }
-  localStorage.setItem(LOCAL_KEY_SK, k);
-  setResumeStatus('✓ API key saved!', 'ok');
-}
-
 async function callGemini(body){
   // Try server proxy first (works on Vercel)
   try{
@@ -24,10 +17,10 @@ async function callGemini(body){
     });
     if(res.ok) return await res.json();
   } catch(e){}
-  // Fallback: direct API call with localStorage key
-  const key = localStorage.getItem(LOCAL_KEY_SK) || document.getElementById('gemini-key-input')?.value?.trim();
-  if(!key) throw new Error('Gemini API key required. Paste your key above and click Save Key.');
-  if(!localStorage.getItem(LOCAL_KEY_SK)) localStorage.setItem(LOCAL_KEY_SK, key);
+  
+  // Fallback: direct API call with localStorage key (if set via console for local dev)
+  const key = localStorage.getItem(LOCAL_KEY_SK);
+  if(!key) throw new Error('Could not connect to Gemini AI. Make sure you are testing on Vercel, or set the API key locally.');
 
   // Model pipeline — tries each model in order until one works
   const MODELS = [
@@ -347,10 +340,6 @@ function initResume(){
       if(f) handleFile(f);
     });
   }
-  // Restore saved API key into input
-  const savedKey = localStorage.getItem(LOCAL_KEY_SK);
-  const keyInput = document.getElementById('gemini-key-input');
-  if(savedKey && keyInput) keyInput.value = savedKey;
   // Load saved profile
   profile = loadProfileData();
   if(profile){

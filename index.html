@@ -39,13 +39,6 @@
       <div class="upload-sub">PDF or TXT — AI will extract your skills, experience & target roles</div>
       <div class="upload-file-name" id="file-name" style="display:none"></div>
     </div>
-    <div style="margin-top:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap" id="key-fallback-row">
-      <input class="key-input" id="gemini-key-input" type="password" placeholder="Gemini API key (free at aistudio.google.com/app/apikey)" style="flex:1;min-width:200px" autocomplete="off"/>
-      <button class="btn-sm" onclick="saveGeminiKey()">Save Key</button>
-    </div>
-    <div style="font-size:9px;color:var(--muted);margin-top:6px;font-family:'IBM Plex Mono',monospace">
-      Free key at <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--accent);text-decoration:none">aistudio.google.com</a> — 1,500 free requests/day · Used for resume parsing &amp; job scoring
-    </div>
     <div class="resume-actions">
       <button class="btn btn-primary" id="btn-parse" onclick="startParse()" disabled>⚡ Parse Resume with AI</button>
     </div>

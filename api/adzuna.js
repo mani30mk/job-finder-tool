@@ -23,7 +23,6 @@ export default async function handler(req, res) {
     app_key: appKey,
     results_per_page: '20',
     what: query,
-    page: p,
     content_type: 'application/json',
     ...(location ? { where: location } : {}),
     ...(salary_min ? { salary_min } : {})
@@ -31,7 +30,12 @@ export default async function handler(req, res) {
 
   try {
     const url = `https://api.adzuna.com/v1/api/jobs/${c}/search/${p}?${params}`;
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      }
+    });
 
     if (!response.ok) {
       const txt = await response.text();

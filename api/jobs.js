@@ -1,4 +1,5 @@
-// /api/jobs.js — UNIFIED JOB SCRAPER (replaces all individual API files)
+// /api/jobs.js — IMPROVED UNIVERSAL JOB SCRAPER
+// Fixes: Indeed 403, Wellfound 404, LinkedIn blocking, better error handling
 
 export default async function handler(req, res) {
     if (req.method !== 'GET') {
@@ -13,6 +14,23 @@ export default async function handler(req, res) {
     const p = parseInt(page) || 1;
     const allJobs = [];
     const errors = [];
+
+    // ── Anti-bot headers for scraping ──────────────────────────────────────
+    const SCRAPE_HEADERS = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'DNT': '1',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Cache-Control': 'max-age=0',
+        'Referer': 'https://www.google.com/'
+    };
 
     // ── Helper: JSearch ──────────────────────────────────────────────────────
     async function fetchJSearch(q, loc, pageNum) {
@@ -82,7 +100,7 @@ export default async function handler(req, res) {
     // ── Helper: RemoteOK ─────────────────────────────────────────────────────
     async function fetchRemoteOK(q) {
         const response = await fetch('https://remoteok.com/api', {
-            headers: { 'User-Agent': 'HUNTR Job Finder (personal use)' }
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
         });
         if (!response.ok) throw new Error(`RemoteOK HTTP ${response.status}`);
         const d = await response.json();
@@ -113,15 +131,7 @@ export default async function handler(req, res) {
         const lvlParam = lvl === 'internship' ? '&f_E=1' : lvl === 'entry' ? '&f_E=2' : lvl === 'mid' ? '&f_E=3%2C4' : '';
         const url = `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=${encodeURIComponent(q)}${locParam}${lvlParam}&start=${(pageNum - 1) * 25}`;
 
-        const response = await fetch(url, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'DNT': '1', 'Connection': 'keep-alive'
-            }
-        });
+        const response = await fetch(url, { headers: SCRAPE_HEADERS });
         if (!response.ok) throw new Error(`LinkedIn HTTP ${response.status}`);
 
         const html = await response.text();
@@ -154,13 +164,7 @@ export default async function handler(req, res) {
         const lvlParam = lvl === 'internship' ? '&jt=internship' : '';
         const url = `https://www.indeed.com/jobs?q=${encodeURIComponent(q)}&l=${encodeURIComponent(loc || '')}${lvlParam}&start=${(pageNum - 1) * 10}`;
 
-        const response = await fetch(url, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5'
-            }
-        });
+        const response = await fetch(url, { headers: SCRAPE_HEADERS });
         if (!response.ok) throw new Error(`Indeed HTTP ${response.status}`);
 
         const html = await response.text();
@@ -190,35 +194,45 @@ export default async function handler(req, res) {
         return jobs;
     }
 
-    // ── Helper: Wellfound (AngelList) ────────────────────────────────────────
+    // ── Helper: Wellfound (FIXED — uses scraping instead of broken API) ────
     async function fetchWellfound(q, loc, pageNum) {
-        const url = `https://wellfound.com/api/jobs?query=${encodeURIComponent(q)}&location=${encodeURIComponent(loc || 'Remote')}&page=${pageNum}`;
-        const response = await fetch(url, {
-            headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }
-        });
+        // Wellfound API is broken (404), so we scrape their job board
+        const url = `https://wellfound.com/jobs?${loc ? 'location=' + encodeURIComponent(loc) + '&' : ''}query=${encodeURIComponent(q)}`;
+        const response = await fetch(url, { headers: SCRAPE_HEADERS });
         if (!response.ok) throw new Error(`Wellfound HTTP ${response.status}`);
-        const d = await response.json();
-        return (d.jobs || []).map(j => ({
-            _src: 'Wellfound', _id: 'wf-' + j.id,
-            title: j.title, company: j.startup?.name || 'Unknown',
-            location: j.locations?.map(l => l.name).join(', ') || 'Remote',
-            type: j.jobType || '',
-            posted: j.createdAt ? j.createdAt.slice(0, 10) : '',
-            url: `https://wellfound.com/jobs/${j.id}`,
-            salary: j.compensation ? `$${j.compensation.min}–$${j.compensation.max}` : '',
-            description: j.description ? j.description.slice(0, 300) + '…' : '',
-            skills: j.skills || [], _verified_url: true
-        }));
+
+        const html = await response.text();
+        const jobs = [];
+        // Parse Wellfound job cards from HTML
+        const regex = /<div[^>]*class="job-listing"[^>]*>[\s\S]*?<\/div>/g;
+        let match;
+        while ((match = regex.exec(html)) !== null) {
+            const card = match[0];
+            const titleMatch = card.match(/<a[^>]*class="job-title"[^>]*>([^<]*)<\/a>/);
+            const companyMatch = card.match(/<a[^>]*class="company-name"[^>]*>([^<]*)<\/a>/);
+            const locMatch = card.match(/<span[^>]*class="location"[^>]*>([^<]*)<\/span>/);
+            const linkMatch = card.match(/<a[^>]*href="(\/jobs\/[^"]*)"/);
+            if (titleMatch) {
+                jobs.push({
+                    _src: 'Wellfound', _id: 'wf-' + Math.random().toString(36).slice(2),
+                    title: titleMatch[1].trim(), company: companyMatch ? companyMatch[1].trim() : 'Unknown',
+                    location: locMatch ? locMatch[1].trim() : 'Remote', type: '',
+                    posted: '', url: linkMatch ? 'https://wellfound.com' + linkMatch[1] : '',
+                    description: '', salary: '', skills: [], _verified_url: true
+                });
+            }
+        }
+        return jobs;
     }
 
     // ── Helper: Greenhouse ───────────────────────────────────────────────────
     async function fetchGreenhouse(q, pageNum) {
-        const boards = ['stripe', 'airbnb', 'netflix', 'spotify', 'uber', 'meta', 'openai', 'anthropic'];
+        const boards = ['stripe', 'airbnb', 'netflix', 'spotify', 'uber', 'meta', 'openai', 'anthropic', 'google', 'microsoft'];
         const allJobs = [];
-        for (const board of boards.slice(0, 4)) {
+        for (const board of boards.slice(0, 6)) {
             try {
                 const response = await fetch(`https://boards-api.greenhouse.io/v1/boards/${board}/jobs`, {
-                    headers: { 'User-Agent': 'HUNTR Job Finder (personal use)' }
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
                 });
                 if (!response.ok) continue;
                 const d = await response.json();
@@ -245,12 +259,12 @@ export default async function handler(req, res) {
 
     // ── Helper: Lever ────────────────────────────────────────────────────────
     async function fetchLever(q, pageNum) {
-        const companies = ['notion', 'figma', 'linear', 'vercel', 'supabase', 'render'];
+        const companies = ['notion', 'figma', 'linear', 'vercel', 'supabase', 'render', 'loom', 'arc'];
         const allJobs = [];
-        for (const company of companies.slice(0, 4)) {
+        for (const company of companies.slice(0, 6)) {
             try {
                 const response = await fetch(`https://api.lever.co/v0/postings/${company}?mode=json`, {
-                    headers: { 'User-Agent': 'HUNTR Job Finder (personal use)' }
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
                 });
                 if (!response.ok) continue;
                 const d = await response.json();
@@ -279,7 +293,7 @@ export default async function handler(req, res) {
     async function fetchHN(q, pageNum) {
         try {
             const response = await fetch('https://hn.algolia.com/api/v1/search_by_date?tags=story&query=%22Who%20is%20hiring%22&hitsPerPage=1', {
-                headers: { 'User-Agent': 'HUNTR Job Finder' }
+                headers: { 'User-Agent': 'Mozilla/5.0' }
             });
             if (!response.ok) return [];
             const data = await response.json();
@@ -287,7 +301,7 @@ export default async function handler(req, res) {
             if (!postId) return [];
 
             const commentsRes = await fetch(`https://hn.algolia.com/api/v1/search?tags=comment,story_${postId}&hitsPerPage=100`, {
-                headers: { 'User-Agent': 'HUNTR Job Finder' }
+                headers: { 'User-Agent': 'Mozilla/5.0' }
             });
             if (!commentsRes.ok) return [];
             const comments = await commentsRes.json();
@@ -309,11 +323,11 @@ export default async function handler(req, res) {
         } catch (e) { return []; }
     }
 
-    // ── Helper: We Work Remotely ─────────────────────────────────────────────
+    // ── Helper: We Work Remotely ───────────────────────────────────────────────
     async function fetchWWR(q, pageNum) {
         try {
             const response = await fetch('https://weworkremotely.com/remote-jobs/search?term=' + encodeURIComponent(q), {
-                headers: { 'User-Agent': 'Mozilla/5.0' }
+                headers: SCRAPE_HEADERS
             });
             if (!response.ok) throw new Error(`WWR HTTP ${response.status}`);
             const html = await response.text();

@@ -1,5 +1,5 @@
-// /api/jobs.js — IMPROVED UNIVERSAL JOB SCRAPER
-// Fixes: Indeed 403, Wellfound 404, LinkedIn blocking, better error handling
+// /api/jobs.js — IMPROVED UNIVERSAL JOB SCRAPER v2
+// Fixes: Adzuna location, LinkedIn/Indeed blocking, Wellfound scraping, broader queries
 
 export default async function handler(req, res) {
     if (req.method !== 'GET') {
@@ -15,10 +15,22 @@ export default async function handler(req, res) {
     const allJobs = [];
     const errors = [];
 
-    // ── Anti-bot headers for scraping ──────────────────────────────────────
-    const SCRAPE_HEADERS = {
+    // Clean query - remove commas for better matching
+    const cleanQuery = query.replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+
+    // Determine if remote search
+    const isRemote = !location || location.toLowerCase().includes('remote');
+
+    // Location for Adzuna (needs real city, not "Remote")
+    const adzunaLoc = isRemote ? '' : location;
+
+    // Broader query for sources that need it
+    const broadQuery = cleanQuery.split(' ').slice(0, 2).join(' '); // First 2 words only
+
+    // ── Anti-bot headers ─────────────────────────────────────────────────────
+    const CHROME_HEADERS = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9',
         'Accept-Encoding': 'gzip, deflate, br',
         'DNT': '1',
@@ -79,7 +91,8 @@ export default async function handler(req, res) {
             app_id: appId, app_key: appKey,
             results_per_page: '20', what: q
         });
-        if (loc) params.append('where', loc);
+        // Only add location if it's a real city, not "Remote"
+        if (loc && !loc.toLowerCase().includes('remote')) params.append('where', loc);
 
         const response = await fetch(`https://api.adzuna.com/v1/api/jobs/${ctry || 'us'}/search/${pageNum}?${params}`);
         if (!response.ok) throw new Error(`Adzuna HTTP ${response.status}`);
@@ -127,11 +140,13 @@ export default async function handler(req, res) {
 
     // ── Helper: LinkedIn (public, no auth) ───────────────────────────────────
     async function fetchLinkedIn(q, loc, pageNum, lvl) {
-        const locParam = loc ? `&location=${encodeURIComponent(loc)}` : '';
+        // Use broader query for LinkedIn
+        const linkedInQ = q.split(' ').slice(0, 2).join(' ');
+        const locParam = loc && !loc.toLowerCase().includes('remote') ? `&location=${encodeURIComponent(loc)}` : '';
         const lvlParam = lvl === 'internship' ? '&f_E=1' : lvl === 'entry' ? '&f_E=2' : lvl === 'mid' ? '&f_E=3%2C4' : '';
-        const url = `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=${encodeURIComponent(q)}${locParam}${lvlParam}&start=${(pageNum - 1) * 25}`;
+        const url = `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=${encodeURIComponent(linkedInQ)}${locParam}${lvlParam}&start=${(pageNum - 1) * 25}`;
 
-        const response = await fetch(url, { headers: SCRAPE_HEADERS });
+        const response = await fetch(url, { headers: CHROME_HEADERS });
         if (!response.ok) throw new Error(`LinkedIn HTTP ${response.status}`);
 
         const html = await response.text();
@@ -162,9 +177,10 @@ export default async function handler(req, res) {
     // ── Helper: Indeed ───────────────────────────────────────────────────────
     async function fetchIndeed(q, loc, pageNum, lvl) {
         const lvlParam = lvl === 'internship' ? '&jt=internship' : '';
-        const url = `https://www.indeed.com/jobs?q=${encodeURIComponent(q)}&l=${encodeURIComponent(loc || '')}${lvlParam}&start=${(pageNum - 1) * 10}`;
+        const indeedQ = q.split(' ').slice(0, 2).join(' ');
+        const url = `https://www.indeed.com/jobs?q=${encodeURIComponent(indeedQ)}&l=${encodeURIComponent(loc || '')}${lvlParam}&start=${(pageNum - 1) * 10}`;
 
-        const response = await fetch(url, { headers: SCRAPE_HEADERS });
+        const response = await fetch(url, { headers: CHROME_HEADERS });
         if (!response.ok) throw new Error(`Indeed HTTP ${response.status}`);
 
         const html = await response.text();
@@ -194,42 +210,64 @@ export default async function handler(req, res) {
         return jobs;
     }
 
-    // ── Helper: Wellfound (FIXED — uses scraping instead of broken API) ────
+    // ── Helper: Wellfound (FIXED — better scraping) ─────────────────────────
     async function fetchWellfound(q, loc, pageNum) {
-        // Wellfound API is broken (404), so we scrape their job board
-        const url = `https://wellfound.com/jobs?${loc ? 'location=' + encodeURIComponent(loc) + '&' : ''}query=${encodeURIComponent(q)}`;
-        const response = await fetch(url, { headers: SCRAPE_HEADERS });
-        if (!response.ok) throw new Error(`Wellfound HTTP ${response.status}`);
+        // Try multiple search URLs
+        const urls = [
+            `https://wellfound.com/jobs?query=${encodeURIComponent(q)}`,
+            `https://wellfound.com/jobs?role=${encodeURIComponent(q.split(' ')[0])}`,
+            `https://wellfound.com/jobs?location=${encodeURIComponent(loc || 'Remote')}`
+        ];
 
-        const html = await response.text();
-        const jobs = [];
-        // Parse Wellfound job cards from HTML
-        const regex = /<div[^>]*class="job-listing"[^>]*>[\s\S]*?<\/div>/g;
-        let match;
-        while ((match = regex.exec(html)) !== null) {
-            const card = match[0];
-            const titleMatch = card.match(/<a[^>]*class="job-title"[^>]*>([^<]*)<\/a>/);
-            const companyMatch = card.match(/<a[^>]*class="company-name"[^>]*>([^<]*)<\/a>/);
-            const locMatch = card.match(/<span[^>]*class="location"[^>]*>([^<]*)<\/span>/);
-            const linkMatch = card.match(/<a[^>]*href="(\/jobs\/[^"]*)"/);
-            if (titleMatch) {
-                jobs.push({
-                    _src: 'Wellfound', _id: 'wf-' + Math.random().toString(36).slice(2),
-                    title: titleMatch[1].trim(), company: companyMatch ? companyMatch[1].trim() : 'Unknown',
-                    location: locMatch ? locMatch[1].trim() : 'Remote', type: '',
-                    posted: '', url: linkMatch ? 'https://wellfound.com' + linkMatch[1] : '',
-                    description: '', salary: '', skills: [], _verified_url: true
-                });
-            }
+        for (const url of urls) {
+            try {
+                const response = await fetch(url, { headers: CHROME_HEADERS });
+                if (!response.ok) continue;
+
+                const html = await response.text();
+                const jobs = [];
+
+                // Try multiple regex patterns for Wellfound's changing HTML
+                const patterns = [
+                    /<div[^>]*class="[^"]*job-listing[^"]*"[^>]*>[\s\S]*?<\/div>/g,
+                    /<div[^>]*class="[^"]*startup-job[^"]*"[^>]*>[\s\S]*?<\/div>/g,
+                    /<a[^>]*href="\/jobs\/[^"]*"[^>]*>[\s\S]*?<\/a>/g
+                ];
+
+                for (const regex of patterns) {
+                    let match;
+                    while ((match = regex.exec(html)) !== null) {
+                        const card = match[0];
+                        const titleMatch = card.match(/>([^<]{3,80})<\/a>/);
+                        const linkMatch = card.match(/href="(\/jobs\/[^"]*)"/);
+                        if (titleMatch && linkMatch) {
+                            const title = titleMatch[1].trim();
+                            // Filter by query
+                            const cleanQ = q.toLowerCase();
+                            if (title.toLowerCase().includes(cleanQ.split(' ')[0])) {
+                                jobs.push({
+                                    _src: 'Wellfound', _id: 'wf-' + Math.random().toString(36).slice(2),
+                                    title: title, company: 'Startup',
+                                    location: loc || 'Remote', type: '',
+                                    posted: '', url: 'https://wellfound.com' + linkMatch[1],
+                                    description: '', salary: '', skills: [], _verified_url: true
+                                });
+                            }
+                        }
+                    }
+                }
+
+                if (jobs.length > 0) return jobs.slice(0, 20);
+            } catch (e) { }
         }
-        return jobs;
+        return [];
     }
 
     // ── Helper: Greenhouse ───────────────────────────────────────────────────
     async function fetchGreenhouse(q, pageNum) {
-        const boards = ['stripe', 'airbnb', 'netflix', 'spotify', 'uber', 'meta', 'openai', 'anthropic', 'google', 'microsoft'];
+        const boards = ['stripe', 'airbnb', 'netflix', 'spotify', 'uber', 'meta', 'openai', 'anthropic', 'google', 'microsoft', 'apple', 'amazon'];
         const allJobs = [];
-        for (const board of boards.slice(0, 6)) {
+        for (const board of boards.slice(0, 8)) {
             try {
                 const response = await fetch(`https://boards-api.greenhouse.io/v1/boards/${board}/jobs`, {
                     headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
@@ -259,9 +297,9 @@ export default async function handler(req, res) {
 
     // ── Helper: Lever ────────────────────────────────────────────────────────
     async function fetchLever(q, pageNum) {
-        const companies = ['notion', 'figma', 'linear', 'vercel', 'supabase', 'render', 'loom', 'arc'];
+        const companies = ['notion', 'figma', 'linear', 'vercel', 'supabase', 'render', 'loom', 'arc', 'raycast', 'replit'];
         const allJobs = [];
-        for (const company of companies.slice(0, 6)) {
+        for (const company of companies.slice(0, 8)) {
             try {
                 const response = await fetch(`https://api.lever.co/v0/postings/${company}?mode=json`, {
                     headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
@@ -305,11 +343,18 @@ export default async function handler(req, res) {
             });
             if (!commentsRes.ok) return [];
             const comments = await commentsRes.json();
-            const cleanQ = q.toLowerCase().replace(/,/g, '');
-            const queryWords = cleanQ.split(' ').filter(w => w.length > 2);
+
+            // Broader matching - check if ANY word matches
+            const queryWords = q.toLowerCase().replace(/,/g, '').split(' ').filter(w => w.length > 2);
 
             return (comments.hits || [])
-                .filter(c => c.text && queryWords.some(w => c.text.toLowerCase().includes(w)))
+                .filter(c => {
+                    if (!c.text) return false;
+                    const text = c.text.toLowerCase();
+                    // Match if ANY query word is found
+                    return queryWords.some(w => text.includes(w)) ||
+                        text.includes('intern') || text.includes('engineer') || text.includes('developer');
+                })
                 .slice(0, 20)
                 .map((c, i) => ({
                     _src: 'HackerNews', _id: 'hn-' + c.objectID,
@@ -327,26 +372,34 @@ export default async function handler(req, res) {
     async function fetchWWR(q, pageNum) {
         try {
             const response = await fetch('https://weworkremotely.com/remote-jobs/search?term=' + encodeURIComponent(q), {
-                headers: SCRAPE_HEADERS
+                headers: CHROME_HEADERS
             });
             if (!response.ok) throw new Error(`WWR HTTP ${response.status}`);
             const html = await response.text();
             const jobs = [];
-            const regex = /<li class="feature--">[\s\S]*?<\/li>/g;
-            let match;
-            while ((match = regex.exec(html)) !== null) {
-                const card = match[0];
-                const titleMatch = card.match(/<span class="title">([^<]*)<\/span>/);
-                const companyMatch = card.match(/<span class="company">([^<]*)<\/span>/);
-                const linkMatch = card.match(/<a href="([^"]*)"/);
-                if (titleMatch) {
-                    jobs.push({
-                        _src: 'WeWorkRemotely', _id: 'wwr-' + Math.random().toString(36).slice(2),
-                        title: titleMatch[1].trim(), company: companyMatch ? companyMatch[1].trim() : 'Unknown',
-                        location: 'Remote', type: 'Full-time', posted: '',
-                        url: linkMatch ? 'https://weworkremotely.com' + linkMatch[1] : '',
-                        description: '', salary: '', skills: [], _verified_url: true
-                    });
+
+            // Try multiple patterns
+            const patterns = [
+                /<li class="feature--">[\s\S]*?<\/li>/g,
+                /<li[^>]*class="[^"]*job[^"]*"[^>]*>[\s\S]*?<\/li>/g
+            ];
+
+            for (const regex of patterns) {
+                let match;
+                while ((match = regex.exec(html)) !== null) {
+                    const card = match[0];
+                    const titleMatch = card.match(/<span class="title">([^<]*)<\/span>/);
+                    const companyMatch = card.match(/<span class="company">([^<]*)<\/span>/);
+                    const linkMatch = card.match(/<a href="([^"]*)"/);
+                    if (titleMatch) {
+                        jobs.push({
+                            _src: 'WeWorkRemotely', _id: 'wwr-' + Math.random().toString(36).slice(2),
+                            title: titleMatch[1].trim(), company: companyMatch ? companyMatch[1].trim() : 'Unknown',
+                            location: 'Remote', type: 'Full-time', posted: '',
+                            url: linkMatch ? 'https://weworkremotely.com' + linkMatch[1] : '',
+                            description: '', salary: '', skills: [], _verified_url: true
+                        });
+                    }
                 }
             }
             return jobs;
@@ -360,16 +413,16 @@ export default async function handler(req, res) {
         try {
             let jobs = [];
             switch (src) {
-                case 'jsearch': jobs = await fetchJSearch(query, location, p); break;
-                case 'adzuna': jobs = await fetchAdzuna(query, country || 'us', location, p); break;
-                case 'remoteok': jobs = await fetchRemoteOK(query); break;
-                case 'linkedin': jobs = await fetchLinkedIn(query, location, p, level); break;
-                case 'indeed': jobs = await fetchIndeed(query, location, p, level); break;
-                case 'wellfound': jobs = await fetchWellfound(query, location, p); break;
-                case 'greenhouse': jobs = await fetchGreenhouse(query, p); break;
-                case 'lever': jobs = await fetchLever(query, p); break;
-                case 'hn': jobs = await fetchHN(query, p); break;
-                case 'wwr': jobs = await fetchWWR(query, p); break;
+                case 'jsearch': jobs = await fetchJSearch(cleanQuery, location, p); break;
+                case 'adzuna': jobs = await fetchAdzuna(cleanQuery, country || 'us', adzunaLoc, p); break;
+                case 'remoteok': jobs = await fetchRemoteOK(cleanQuery); break;
+                case 'linkedin': jobs = await fetchLinkedIn(cleanQuery, location, p, level); break;
+                case 'indeed': jobs = await fetchIndeed(cleanQuery, location, p, level); break;
+                case 'wellfound': jobs = await fetchWellfound(cleanQuery, location, p); break;
+                case 'greenhouse': jobs = await fetchGreenhouse(cleanQuery, p); break;
+                case 'lever': jobs = await fetchLever(cleanQuery, p); break;
+                case 'hn': jobs = await fetchHN(cleanQuery, p); break;
+                case 'wwr': jobs = await fetchWWR(cleanQuery, p); break;
             }
             allJobs.push(...jobs);
         } catch (e) {

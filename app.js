@@ -19,6 +19,8 @@ function restore(){
     }
     updateCounts();
   }catch(e){}
+  // Init resume module
+  if(typeof initResume === 'function') initResume();
 }
 
 // ── UI ────────────────────────────────────────────────────────────────────────
@@ -185,14 +187,22 @@ RULES: Never fabricate numeric job IDs. Prefer greenhouse.io, lever.co, workday 
     generationConfig:{ temperature:0.15, maxOutputTokens:2500 },
     tools:[{google_search:{}}]
   };
-  const res = await fetch('/api/gemini', {
-    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
-  });
-  if(!res.ok){
-    const e = await res.json().catch(()=>({}));
-    throw new Error(e.error || `HTTP ${res.status}`);
+  
+  let d;
+  if(typeof callGemini === 'function'){
+    d = await callGemini(body);
+  } else {
+    // Fallback if resume.js isn't loaded for some reason
+    const res = await fetch('/api/gemini', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
+    });
+    if(!res.ok){
+      const e = await res.json().catch(()=>({}));
+      throw new Error(e.error || `HTTP ${res.status}`);
+    }
+    d = await res.json();
   }
-  const d = await res.json();
+  
   const text = d?.candidates?.[0]?.content?.parts?.[0]?.text||'';
   const m = text.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/) || text.match(/(\[[\s\S]*\])/);
   if(!m) return [];
@@ -295,8 +305,20 @@ async function doSearch(fresh){
 
   // ── Dedup & merge ────────────────────────────────────────────────────────
   const before = allJobs.length;
-  const deduped = dedup(allJobs);
+  let deduped = dedup(allJobs);
   const removed = before - deduped.length;
+
+  // ── AI Scoring against profile ──────────────────────────────────────────
+  if(profile && deduped.length > 0 && typeof scoreJobsWithProfile === 'function'){
+    setStatus('⚡ Scoring jobs against your profile…','info');
+    try{
+      deduped = await scoreJobsWithProfile(deduped, profile);
+      deduped.sort((a,b) => (b._score||50) - (a._score||50));
+    } catch(e){ /* keep unscored */ }
+  }
+
+  // Mark new jobs
+  deduped.forEach(j => { if(typeof isNewJob==='function') j._isNew = isNewJob(j.posted); });
 
   if(fresh) state.jobs = deduped;
   else state.jobs = dedup([...state.jobs, ...deduped]);
@@ -304,6 +326,10 @@ async function doSearch(fresh){
   state.page = page + 1;
   state.hasMore = allJobs.length >= 15;
   persist();
+
+  // Save daily date
+  if(typeof saveDailyDate === 'function') saveDailyDate();
+  if(typeof checkDailyUpdate === 'function') checkDailyUpdate();
 
   setProgress(100, STEPS, 5);
   setTimeout(hideProgress, 700);
@@ -314,9 +340,10 @@ async function doSearch(fresh){
   deduped.forEach(j => { srcCounts[j._src] = (srcCounts[j._src]||0)+1; });
   const summary = Object.entries(srcCounts).map(([s,c])=>`${c} from ${s}`).join(', ');
 
+  const scoreNote = profile ? ' AI-scored against your profile.' : '';
   setStatus(
     deduped.length
-      ? `✓ Found ${deduped.length} jobs${fresh?'':' more'} — ${summary}.${sourceErrors.length?' Some sources skipped.':''}`
+      ? `✓ Found ${deduped.length} jobs${fresh?'':' more'} — ${summary}.${scoreNote}${sourceErrors.length?' Some sources skipped.':''}`
       : `No results. ${sourceErrors.join(' | ')}`,
     deduped.length ? 'ok' : 'warn'
   );
@@ -382,6 +409,11 @@ function cardHTML(j, i){
   const hasLi  = isValidUrl(j.linkedin_url);
   const fb = fallbackLinks(j);
 
+  // Score display
+  const sc = j._score || 0;
+  const hasScore = profile && sc > 0;
+  const pillClass = sc>=80?'sp-excellent':sc>=60?'sp-good':sc>=40?'sp-fair':'sp-poor';
+
   let applyBtns = '';
   if(hasUrl){
     applyBtns += `<a class="btn-apply" href="${h(j.url)}" target="_blank" rel="noopener">Apply →</a>`;
@@ -393,6 +425,15 @@ function cardHTML(j, i){
   }
   applyBtns += `<a class="btn-fallback" href="${fb.indeed}" target="_blank" rel="noopener" title="Search Indeed">Indeed</a>`;
   applyBtns += `<a class="btn-fallback" href="${fb.linkedin}" target="_blank" rel="noopener" title="Search LinkedIn">LinkedIn Search</a>`;
+
+  // Match reasons HTML
+  let matchHtml = '';
+  if(hasScore && ((j._reasons||[]).length || (j._missing||[]).length)){
+    matchHtml = '<div class="match-reasons">' +
+      (j._reasons||[]).map(r=>'<div class="reason reason-ok">✓ '+h(r)+'</div>').join('') +
+      (j._missing||[]).map(r=>'<div class="reason reason-miss">✗ '+h(r)+'</div>').join('') +
+      '</div>';
+  }
 
   return `
 <div class="card" id="c-${j._id}" style="animation-delay:${delay}s">
@@ -407,15 +448,18 @@ function cardHTML(j, i){
         ${j.type?`<span class="badge b-type">${h(j.type)}</span>`:''}
         <span class="badge ${srcBadgeClass(j._src)}">${h(j._src)}</span>
         ${j.salary?`<span class="badge b-salary">💰 ${h(j.salary)}</span>`:''}
+        ${j._isNew?'<span class="badge b-new">🆕 New</span>':''}
         ${!hasUrl&&!hasLi&&j._src==='Gemini'?'<span class="badge" style="background:rgba(255,204,0,.07);color:var(--warn);border:1px solid rgba(255,204,0,.2)">⚠ link unverified</span>':''}
       </div>
     </div>
     <div class="card-actions">
+      ${hasScore?`<span class="score-pill ${pillClass}">${sc}%</span>`:''}
       <button class="btn-star${sv?' on':''}" onclick="toggleSave('${j._id}')" title="${sv?'Unsave':'Save'}">${sv?'★':'☆'}</button>
       <button class="btn-exp" onclick="toggleExp('${j._id}')">▼</button>
     </div>
   </div>
   <div class="card-body" id="b-${j._id}">
+    ${matchHtml}
     ${j.description?`<p class="card-desc">${h(j.description)}</p>`:''}
     ${skills.length?`<div class="card-skills">${skills.map(s=>`<span class="skill-tag">${h(s)}</span>`).join('')}</div>`:''}
     <div class="card-footer">

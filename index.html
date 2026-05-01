@@ -3,9 +3,11 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>HUNTR — Multi-Source AI Job Finder</title>
+<title>HUNTR — AI Job Finder</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=Bebas+Neue&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="style.css"/>
+<!-- PDF.js for client-side resume text extraction -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
 
@@ -13,7 +15,7 @@
   <div class="logo">
     <div>
       <div class="logo-text">HUNTR</div>
-      <div class="logo-sub">Multi-Source AI Job Engine</div>
+      <div class="logo-sub">Resume-Powered AI Job Engine</div>
     </div>
   </div>
   <div class="header-pills">
@@ -25,6 +27,69 @@
 </header>
 
 <main>
+
+<!-- RESUME UPLOAD (visible only before profile is saved) -->
+<div id="resume-upload-section">
+  <div class="sec-label">// Upload Your Resume — one-time setup, searches forever</div>
+  <div class="resume-card">
+    <div class="upload-zone" id="upload-zone">
+      <input type="file" id="resume-file" accept=".pdf,.txt" onchange="onFileSelect(event)"/>
+      <div class="upload-icon">📄</div>
+      <div class="upload-title">Drop your resume here</div>
+      <div class="upload-sub">PDF or TXT — AI will extract your skills, experience & target roles</div>
+      <div class="upload-file-name" id="file-name" style="display:none"></div>
+    </div>
+    <div style="margin-top:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap" id="key-fallback-row">
+      <input class="key-input" id="gemini-key-input" type="password" placeholder="Gemini API key (free at aistudio.google.com/app/apikey)" style="flex:1;min-width:200px" autocomplete="off"/>
+      <button class="btn-sm" onclick="saveGeminiKey()">Save Key</button>
+    </div>
+    <div style="font-size:9px;color:var(--muted);margin-top:6px;font-family:'IBM Plex Mono',monospace">
+      Free key at <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--accent);text-decoration:none">aistudio.google.com</a> — 1,500 free requests/day · Used for resume parsing &amp; job scoring
+    </div>
+    <div class="resume-actions">
+      <button class="btn btn-primary" id="btn-parse" onclick="startParse()" disabled>⚡ Parse Resume with AI</button>
+    </div>
+    <div class="resume-progress" id="resume-progress" style="display:none">
+      <div class="progress-track"><div class="progress-fill" id="resume-prog-fill" style="width:0%"></div></div>
+      <div class="resume-prog-label" id="resume-prog-label">Extracting text…</div>
+    </div>
+    <div class="status-bar" id="resume-status" style="display:none"></div>
+  </div>
+</div>
+
+<!-- PROFILE BANNER (shown after resume is parsed) -->
+<div id="profile-banner" style="display:none">
+  <div class="sec-label">// Your Profile — <span id="profile-parsed-date"></span></div>
+  <div class="profile-card">
+    <div class="profile-top">
+      <div class="profile-info">
+        <div class="profile-avatar" id="profile-avatar"></div>
+        <div>
+          <div class="profile-name" id="profile-name"></div>
+          <div class="profile-role" id="profile-role"></div>
+        </div>
+      </div>
+      <div class="profile-actions">
+        <button class="btn btn-primary" onclick="huntFromProfile()">🔍 Hunt Today's Jobs</button>
+        <button class="btn-sm" onclick="resetProfile()">↺ Re-upload Resume</button>
+      </div>
+    </div>
+    <div class="profile-skills" id="profile-skills"></div>
+    <div class="profile-keywords" id="profile-keywords"></div>
+    <div class="profile-meta-info" id="profile-meta-info"></div>
+  </div>
+</div>
+
+<!-- DAILY REFRESH BANNER -->
+<div id="daily-banner" style="display:none">
+  <div class="daily-card">
+    <div>
+      <div class="daily-text"><span class="daily-dot"></span> <span id="daily-message"></span></div>
+      <div class="daily-sub" id="daily-sub"></div>
+    </div>
+    <button class="btn-sm" onclick="huntFromProfile()">↺ Refresh Now</button>
+  </div>
+</div>
 
 <!-- API SOURCES STATUS -->
 <div class="sec-label">// Connected Sources — API keys configured on server</div>
@@ -66,7 +131,7 @@
 </div>
 
 <!-- SEARCH FORM -->
-<div class="sec-label">// Search Parameters</div>
+<div class="sec-label">// Search Parameters <span style="color:var(--dim);font-size:8px;margin-left:8px">(auto-filled from resume)</span></div>
 <div class="form-panel">
   <div class="form-grid">
     <div class="field field-2">
@@ -211,11 +276,12 @@
 </div>
 
 <div class="cards" id="cards">
-  <div class="empty"><div class="empty-icon">⚡</div>Select your filters and hit HUNT JOBS to get started</div>
+  <div class="empty"><div class="empty-icon">📄</div>Upload your resume above to get started — AI will find jobs matched to your skills</div>
 </div>
 
 </main>
 
+<script src="resume.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

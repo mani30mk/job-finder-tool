@@ -1,0 +1,19 @@
+# Ignore environment files and API keys
+.env
+.env.*
+# Ignore Python cache and virtual environments
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+env/
+venv/
+ENV/
+# Ignore VSCode settings
+.vscode/
+# Ignore OS files
+.DS_Store
+Thumbs.db
+# Ignore uploads and session data
+uploads/
+session_data/

@@ -1,0 +1,63 @@
+{
+  "greenhouse": [
+    "google",
+    "microsoft",
+    "amazon",
+    "meta",
+    "netflix",
+    "apple",
+    "spotify",
+    "stripe",
+    "airbnb",
+    "uber",
+    "lyft",
+    "slack",
+    "discord",
+    "roblox",
+    "coinbase",
+    "postman",
+    "druva",
+    "figma",
+    "vercel",
+    "notion",
+    "linear",
+    "supabase",
+    "render",
+    "mux",
+    "planetscale",
+    "flyio",
+    "railway",
+    "replicate",
+    "langchain",
+    "flipkart",
+    "swiggy",
+    "zerodha",
+    "razorpay",
+    "freshworks",
+    "hasura",
+    "appsmith",
+    "chargebee",
+    "browserstack",
+    "leadiq"
+  ],
+  "lever": [
+    "warp",
+    "raycast",
+    "calcom",
+    "arc",
+    "merge",
+    "resend",
+    "trigger",
+    "uploadthing"
+  ],
+  "ashby": [
+    "supabase",
+    "railway",
+    "render"
+  ],
+  "unstop_queries": [
+    "software engineer",
+    "internship"
+  ],
+  "hackernews_thread_ids": []
+}

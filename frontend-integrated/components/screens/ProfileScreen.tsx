@@ -1,7 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { User, Settings, Bell, Link as LinkIcon, Wifi, WifiOff, Loader2 } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import {
+  User, Settings, Bell, Link as LinkIcon,
+  Wifi, WifiOff, Loader2, FileText, Upload, CheckCircle, XCircle,
+} from "lucide-react";
 import { api } from "@/lib/api";
 
 const DEFAULT_PROFILE = {
@@ -20,6 +23,7 @@ const DEFAULT_PROFILE = {
 };
 
 type ConnectionStatus = "idle" | "testing" | "ok" | "fail";
+type ResumeStatus = "idle" | "uploading" | "success" | "error";
 
 export function ProfileScreen() {
   const [profile, setProfile] = useState(DEFAULT_PROFILE);
@@ -27,6 +31,12 @@ export function ProfileScreen() {
   const [isEditing, setIsEditing] = useState(false);
   const [connStatus, setConnStatus] = useState<ConnectionStatus>("idle");
   const [connLatency, setConnLatency] = useState<number | null>(null);
+
+  // Resume upload state
+  const [resumeStatus, setResumeStatus] = useState<ResumeStatus>("idle");
+  const [resumeFileName, setResumeFileName] = useState<string | null>(null);
+  const [resumeError, setResumeError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load overrides from localStorage (only overrides, not the whole profile)
   useEffect(() => {
@@ -38,6 +48,8 @@ export function ProfileScreen() {
         setProfile(merged);
         setFormData(merged);
       }
+      const savedResume = localStorage.getItem("resumeFileName");
+      if (savedResume) setResumeFileName(savedResume);
     } catch {}
   }, []);
 
@@ -66,6 +78,84 @@ export function ProfileScreen() {
     } else {
       setConnStatus("fail");
     }
+  };
+
+  // ── Resume upload handler ──
+  const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const allowed = [".pdf", ".docx", ".txt", ".md"];
+    const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
+    if (!allowed.includes(ext)) {
+      setResumeStatus("error");
+      setResumeError(`Invalid file type. Allowed: ${allowed.join(", ")}`);
+      return;
+    }
+
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      setResumeStatus("error");
+      setResumeError("File too large. Maximum size: 10MB");
+      return;
+    }
+
+    setResumeStatus("uploading");
+    setResumeError(null);
+
+    try {
+      const baseUrl = formData.apiUrl || api.baseUrl;
+      const form = new FormData();
+      form.append("file", file);
+
+      const res = await fetch(`${baseUrl}/api/v1/profile/upload`, {
+        method: "POST",
+        body: form,
+        signal: AbortSignal.timeout(30000),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      const parsed = data.profile;
+
+      // Update profile with parsed resume data
+      const updatedProfile = {
+        ...formData,
+        name: parsed.name || formData.name,
+        skills: parsed.skills?.length > 0
+          ? [...new Set([...parsed.skills.map((s: string) => s.charAt(0).toUpperCase() + s.slice(1))])]
+          : formData.skills,
+        title: parsed.job_titles?.[0]
+          ? parsed.job_titles.map((t: string) => t.charAt(0).toUpperCase() + t.slice(1)).join(" / ")
+          : formData.title,
+        experience: parsed.experience_years > 0
+          ? `${parsed.experience_years} years`
+          : formData.experience,
+        location: parsed.locations_preferred?.[0]
+          ? parsed.locations_preferred.map((l: string) => l.charAt(0).toUpperCase() + l.slice(1)).join(", ")
+          : formData.location,
+        email: parsed.email || formData.email,
+      };
+
+      setFormData(updatedProfile);
+      setProfile(updatedProfile);
+      localStorage.setItem("userProfile", JSON.stringify(updatedProfile));
+      setResumeFileName(file.name);
+      localStorage.setItem("resumeFileName", file.name);
+      setResumeStatus("success");
+
+    } catch (err: unknown) {
+      setResumeStatus("error");
+      setResumeError(err instanceof Error ? err.message : "Upload failed");
+    }
+
+    // Reset file input so same file can be re-uploaded
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   return (
@@ -127,6 +217,86 @@ export function ProfileScreen() {
               <span className="text-gray-600">University:</span>
               <span className="font-semibold text-gray-900">SASTRA University, CSE</span>
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Resume Upload ── */}
+      <div className="bg-white rounded-lg border border-gray-200 p-8">
+        <h2 className="text-xl font-bold text-gray-900 mb-2 flex items-center gap-2">
+          <FileText className="w-5 h-5 text-blue-600" />
+          Resume
+        </h2>
+        <p className="text-sm text-gray-500 mb-5">
+          Upload your resume to auto-fill your profile. Updating it will re-parse and refresh your skills &amp; details.
+        </p>
+
+        {/* Current resume display */}
+        {resumeFileName && resumeStatus !== "uploading" && (
+          <div className="flex items-center gap-3 mb-4 px-4 py-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <FileText className="w-5 h-5 text-blue-600 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-blue-900 truncate">{resumeFileName}</p>
+              <p className="text-xs text-blue-600">Currently loaded</p>
+            </div>
+            <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
+          </div>
+        )}
+
+        {/* Upload area */}
+        <div
+          onClick={() => fileInputRef.current?.click()}
+          className={`relative border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${
+            resumeStatus === "uploading"
+              ? "border-blue-400 bg-blue-50"
+              : resumeStatus === "error"
+              ? "border-red-300 bg-red-50 hover:border-red-400"
+              : "border-gray-300 bg-gray-50 hover:border-blue-400 hover:bg-blue-50"
+          }`}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.docx,.txt,.md"
+            onChange={handleResumeUpload}
+            className="hidden"
+            id="resume-upload"
+          />
+
+          {resumeStatus === "uploading" ? (
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
+              <p className="text-sm font-semibold text-blue-700">Parsing resume...</p>
+              <p className="text-xs text-blue-500">Extracting skills, experience &amp; details</p>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center">
+                <Upload className="w-7 h-7 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-900">
+                  {resumeFileName ? "Upload New Resume" : "Upload Resume"}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">PDF, DOCX, or TXT — max 10MB</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Status messages */}
+        {resumeStatus === "success" && (
+          <div className="flex items-center gap-2 mt-3 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
+            <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />
+            <p className="text-sm text-green-700 font-medium">
+              Resume parsed! Profile updated with extracted skills &amp; details.
+            </p>
+          </div>
+        )}
+        {resumeStatus === "error" && (
+          <div className="flex items-center gap-2 mt-3 px-3 py-2 bg-red-50 border border-red-200 rounded-lg">
+            <XCircle className="w-4 h-4 text-red-500 shrink-0" />
+            <p className="text-sm text-red-700">{resumeError || "Upload failed. Check your backend connection."}</p>
           </div>
         )}
       </div>

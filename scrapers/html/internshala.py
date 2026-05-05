@@ -52,7 +52,8 @@ class InternshalaScraper(BaseScraper):
         for card in tree.css(".individual_internship"):
             title_el = card.css_first(".job-internship-name")
             company_el = card.css_first(".company-name")
-            loc_el = card.css_first("#location_names")
+            # Use .locations (correct selector) with fallback to #location_names
+            loc_el = card.css_first(".locations") or card.css_first("#location_names")
             link_el = card.css_first("a")
 
             if not title_el or not link_el:
@@ -60,8 +61,23 @@ class InternshalaScraper(BaseScraper):
 
             title = title_el.text(strip=True)
             company = company_el.text(strip=True) if company_el else "Unknown"
-            location = loc_el.text(strip=True) if loc_el else "Remote"
+            raw_location = loc_el.text(strip=True) if loc_el else ""
             link = "https://internshala.com" + link_el.attributes.get("href", "")
+
+            # Normalize location — all Internshala internships are in India
+            # "Work from home" → "Work from Home, India"
+            # "Bangalore" → "Bangalore, India"
+            # Empty → "India (Remote)"
+            if not raw_location:
+                location = "India (Remote)"
+            elif raw_location.lower() in ("work from home", "work from home/remote"):
+                location = "Work from Home, India"
+            else:
+                # Append ", India" if not already present
+                if "india" not in raw_location.lower():
+                    location = f"{raw_location}, India"
+                else:
+                    location = raw_location
 
             jobs.append({
                 "job_id": f"is_{hash(link) & 0xFFFFFFFF}",

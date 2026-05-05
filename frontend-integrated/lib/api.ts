@@ -81,7 +81,7 @@ function transformJob(b: BackendJob, index: number): Job {
     link: b.apply_url || b.url || "#",
     companyLogo: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(b.company || "JH")}`,
     isNew: Boolean(b.is_new),
-    // salary omitted — backend sends string, type expects object; skip to avoid type errors
+    source_platform: b.source_platform || "",
   };
 }
 

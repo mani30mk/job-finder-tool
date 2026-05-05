@@ -18,6 +18,7 @@ export interface Job {
   link: string;
   companyLogo?: string;
   isNew: boolean;
+  source_platform?: string;
 }
 
 export interface DashboardStats {

@@ -66,6 +66,22 @@ useEffect(() => {
       const jobLoc = job.location.toLowerCase();
       const matchesLocation = filters.locations.some((loc) => {
         const l = loc.toLowerCase();
+
+        // "India" filter — match all Indian cities + "india" in location
+        if (l === "india") {
+          const indianCities = [
+            "india", "bangalore", "bengaluru", "mumbai", "delhi", "noida",
+            "gurgaon", "gurugram", "hyderabad", "chennai", "pune", "kolkata",
+            "ahmedabad", "jaipur", "lucknow", "kochi", "cochin", "chandigarh",
+            "indore", "coimbatore", "thiruvananthapuram", "nagpur", "surat",
+            "visakhapatnam", "bhopal", "patna", "vadodara", "navi mumbai",
+            "kanchipuram", "mysore", "mangalore", "goa", "dehradun",
+            "salem", "madurai", "trichy", "thanjavur",
+          ];
+          return indianCities.some((city) => jobLoc.includes(city))
+            || job.source_platform === "internshala";
+        }
+
         // Handle "Delhi / NCR" matching "delhi", "noida", "gurgaon"
         if (l === "delhi / ncr") {
           return jobLoc.includes("delhi") || jobLoc.includes("noida") || jobLoc.includes("gurgaon") || jobLoc.includes("gurugram");

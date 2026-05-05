@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Environment
+.env
+.env.local
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+logs/
+*.log
+
+# Cache
+.jobhunter_cache.db
+.api_quota_tracker.json
+
+# Temp/debug scripts
+_*.py
+
+# Session data (contains cookies/tokens)
+session_data/
+
+# Uploaded resumes (privacy)
+uploads/resumes/*.pdf
+uploads/resumes/*.docx
+
+# Node.js (frontend)
+frontend-integrated/node_modules/
+frontend-integrated/.next/
+frontend-integrated/.turbo/
+
+# Large files that shouldn't be in git normally
+# NOTE: jobs.db IS tracked intentionally — GitHub Actions updates it daily
+# If the file is too large (>100MB), use Git LFS instead

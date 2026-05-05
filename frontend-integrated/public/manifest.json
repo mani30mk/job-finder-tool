@@ -1,0 +1,30 @@
+{
+  "name": "Job Hunter",
+  "short_name": "JobHunter",
+  "description": "Personal job aggregator — daily matches straight to your phone",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f9fafb",
+  "theme_color": "#2563eb",
+  "categories": ["productivity", "business"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/apple-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    { "name": "New Today", "url": "/new-today", "description": "Jobs scraped in the last 24 hours" },
+    { "name": "Saved Jobs", "url": "/saved", "description": "Your bookmarked jobs" }
+  ]
+}

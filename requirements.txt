@@ -1,0 +1,9 @@
+scrapy>=2.11
+playwright>=1.40
+playwright-stealth>=1.0
+selectolax>=0.3
+httpx>=0.25
+rich>=13.0
+streamlit>=1.28
+aiohttp>=3.9
+python-dateutil>=2.8

@@ -1,0 +1,39 @@
+# JobHunter Advanced Configuration
+
+# Database
+db_path: "jobs.db"
+cache_path: ".jobhunter_cache.db"
+
+# Semantic matching
+embedding_model: "all-MiniLM-L6-v2"
+similarity_threshold: 0.65
+use_semantic_matching: true
+
+# LLM Parsing (set api_key to enable)
+llm_provider: "openai"
+llm_model: "gpt-3.5-turbo"
+llm_api_key: ""
+use_llm_parsing: false
+
+# Web search
+enable_web_search: false
+search_sources:
+  - linkedin
+  - indeed
+max_web_jobs: 50
+
+# Deduplication
+dedup_threshold: 0.85
+
+# Scoring weights
+base_weights:
+  skills: 0.35
+  title: 0.20
+  experience: 0.15
+  location: 0.10
+  salary: 0.10
+  type: 0.10
+
+# Output defaults
+default_limit: 20
+default_min_score: 0.1

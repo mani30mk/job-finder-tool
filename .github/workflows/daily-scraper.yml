@@ -1,0 +1,72 @@
+# Daily Job Scraper — runs in GitHub Actions cloud (free)
+# Scrapes jobs from all sources, updates jobs.db, and commits back to repo.
+#
+# Schedule: Every day at 00:30 UTC (6:00 AM IST)
+# Can also be triggered manually from GitHub Actions tab.
+
+name: Daily Job Scraper
+
+on:
+  schedule:
+    # 00:30 UTC = 06:00 AM IST
+    - cron: '30 0 * * *'
+  workflow_dispatch:  # Allow manual trigger from GitHub UI
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install python-dotenv selectolax httpx aiohttp
+
+      - name: Run scrapers
+        env:
+          SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
+          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+          THEIRSTACK_KEY: ${{ secrets.THEIRSTACK_KEY }}
+          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+        run: |
+          python scheduler.py --run-once
+
+      - name: Show DB stats
+        run: |
+          python -c "
+          import sqlite3
+          conn = sqlite3.connect('jobs.db')
+          c = conn.cursor()
+          c.execute('SELECT COUNT(*) FROM jobs')
+          total = c.fetchone()[0]
+          c.execute('SELECT COUNT(*) FROM jobs WHERE is_active=1')
+          active = c.fetchone()[0]
+          c.execute(\"SELECT source_platform, COUNT(*) FROM jobs WHERE is_active=1 GROUP BY source_platform ORDER BY 2 DESC\")
+          platforms = c.fetchall()
+          print(f'Total: {total} | Active: {active}')
+          for p, cnt in platforms:
+              print(f'  {p}: {cnt}')
+          conn.close()
+          "
+
+      - name: Commit updated database
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add jobs.db
+          # Only commit if there are changes
+          git diff --cached --quiet || git commit -m "🔄 Daily scrape: $(date -u '+%Y-%m-%d %H:%M UTC')"
+          git push

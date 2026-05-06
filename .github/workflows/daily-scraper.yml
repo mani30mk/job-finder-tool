@@ -35,7 +35,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install python-dotenv selectolax httpx aiohttp rapidfuzz google-generativeai
+          pip install python-dotenv selectolax httpx aiohttp rapidfuzz google-generativeai libsql-client
 
       - name: Run scrapers
         env:
@@ -45,32 +45,22 @@ jobs:
           ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
           ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
         run: |
           python scheduler.py --run-once
 
       - name: Show DB stats
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
         run: |
           python -c "
-          import sqlite3
-          conn = sqlite3.connect('jobs.db')
-          c = conn.cursor()
-          c.execute('SELECT COUNT(*) FROM jobs')
-          total = c.fetchone()[0]
-          c.execute('SELECT COUNT(*) FROM jobs WHERE is_active=1')
-          active = c.fetchone()[0]
-          c.execute(\"SELECT source_platform, COUNT(*) FROM jobs WHERE is_active=1 GROUP BY source_platform ORDER BY 2 DESC\")
-          platforms = c.fetchall()
-          print(f'Total: {total} | Active: {active}')
-          for p, cnt in platforms:
-              print(f'  {p}: {cnt}')
-          conn.close()
+          from database.db import get_conn
+          with get_conn() as conn:
+              res = conn.execute('SELECT COUNT(*) as total FROM jobs')
+              total = res[0]['total']
+              res = conn.execute('SELECT COUNT(*) as active FROM jobs WHERE is_active=1')
+              active = res[0]['active']
+              print(f'Total: {total} | Active: {active}')
           "
-
-      - name: Commit updated database
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add jobs.db
-          # Only commit if there are changes
-          git diff --cached --quiet || git commit -m "🔄 Daily scrape: $(date -u '+%Y-%m-%d %H:%M UTC')"
-          git push

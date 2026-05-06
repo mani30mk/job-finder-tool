@@ -17,7 +17,10 @@ CREATE TABLE IF NOT EXISTS jobs (
     posted_date TEXT,
     scraped_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     is_active BOOLEAN DEFAULT 1,
-    is_new BOOLEAN DEFAULT 1
+    is_new BOOLEAN DEFAULT 1,
+    gemini_score REAL DEFAULT 0.0,
+    gemini_reasons TEXT,
+    gemini_summary TEXT
 );
 
 -- Full-text search virtual table

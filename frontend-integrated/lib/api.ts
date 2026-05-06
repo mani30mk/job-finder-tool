@@ -5,13 +5,8 @@ import { Job, DashboardStats } from "./types";
 import { MOCK_JOBS } from "./mock-data";
 
 function getBaseUrl(): string {
-  if (typeof window === "undefined")
-    return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-  return (
-    localStorage.getItem("apiUrl") ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    "http://localhost:8000"
-  );
+  // Use relative path to hit Next.js API routes directly
+  return "";
 }
 
 // ── Backend shapes ────────────────────────────────────────────────────────────

@@ -8,23 +8,77 @@ from app_config.settings import DB_PATH
 from database.models import SCHEMA_SQL
 
 
+import os
+import libsql_client
+from dotenv import load_dotenv
+
+load_dotenv()
+
+TURSO_URL = os.environ.get("TURSO_DATABASE_URL")
+TURSO_TOKEN = os.environ.get("TURSO_AUTH_TOKEN")
+# Make sure we use https instead of libsql for the sync client to avoid websocket issues sometimes
+if TURSO_URL and TURSO_URL.startswith("libsql://"):
+    TURSO_URL = TURSO_URL.replace("libsql://", "https://")
+
 def init_db():
     """Initialize database with schema."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if TURSO_URL:
+        # Turso uses a cloud db, schema is already created by migration script.
+        # So we skip local schema creation for Turso.
+        print(f"[DB] Using Turso cloud database: {TURSO_URL}")
+        return
+
     with get_conn() as conn:
         conn.executescript(SCHEMA_SQL)
         conn.commit()
-    print(f"[DB] Initialized at {DB_PATH}")
-
+    print(f"[DB] Initialized local sqlite at {DB_PATH}")
 
 @contextmanager
 def get_conn():
-    conn = sqlite3.connect(DB_PATH, timeout=30)
-    conn.row_factory = sqlite3.Row
-    try:
-        yield conn
-    finally:
-        conn.close()
+    """Returns a local sqlite connection or a fake sqlite connection wrapping libsql sync client."""
+    if TURSO_URL:
+        # We don't yield a sqlite connection, instead we could use a custom wrapper 
+        # but let's see if we can just yield the libsql sync client.
+        # Wait, the rest of the code expects sqlite3 methods like execute, executemany, commit.
+        # Let's write a small wrapper that mimics sqlite3 enough for our code.
+        class TursoWrapper:
+            def __init__(self):
+                self.client = libsql_client.create_client_sync(TURSO_URL, auth_token=TURSO_TOKEN)
+            def execute(self, sql, params=()):
+                res = self.client.execute(sql, params)
+                # Mock sqlite3.Row
+                class RowMock:
+                    def __init__(self, cols, row):
+                        self.cols = cols
+                        self.row = row
+                    def __getitem__(self, key):
+                        if isinstance(key, int):
+                            return self.row[key]
+                        return self.row[self.cols.index(key)]
+                    def keys(self):
+                        return self.cols
+                return [RowMock(res.columns, r) for r in res.rows]
+            def executemany(self, sql, params_list):
+                stmts = [libsql_client.Statement(sql, p) for p in params_list]
+                self.client.batch(stmts)
+            def commit(self):
+                pass
+            def close(self):
+                self.client.close()
+                
+        wrapper = TursoWrapper()
+        try:
+            yield wrapper
+        finally:
+            wrapper.close()
+    else:
+        conn = sqlite3.connect(DB_PATH, timeout=30)
+        conn.row_factory = sqlite3.Row
+        try:
+            yield conn
+        finally:
+            conn.close()
 
 
 def insert_jobs(jobs: List[Dict]) -> int:

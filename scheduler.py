@@ -126,6 +126,42 @@ def run_scrape_cycle():
         except Exception as e:
             log.error("  Internshala ERROR: %s", e)
 
+        # ── Phase 5: Free API sources (Remotive + Arbeitnow) ──
+        log.info("Phase 5: Free API sources (Remotive + Arbeitnow)")
+        try:
+            from scrapers.remotive_api import RemotiveScraper
+            remotive_jobs = asyncio.run(RemotiveScraper(limit=200).scrape())
+            all_jobs.extend(remotive_jobs)
+            log.info("  Remotive: %d jobs", len(remotive_jobs))
+        except Exception as e:
+            log.error("  Remotive ERROR: %s", e)
+
+        try:
+            from scrapers.arbeitnow_api import ArbeitnowScraper
+            arbeitnow_jobs = asyncio.run(ArbeitnowScraper(max_pages=3).scrape())
+            all_jobs.extend(arbeitnow_jobs)
+            log.info("  Arbeitnow: %d jobs", len(arbeitnow_jobs))
+        except Exception as e:
+            log.error("  Arbeitnow ERROR: %s", e)
+
+        # ── Phase 6: India-specific HTML scrapers ──
+        log.info("Phase 6: India-specific (Naukri + Freshersworld)")
+        try:
+            from scrapers.naukri import NaukriScraper
+            naukri_jobs = asyncio.run(NaukriScraper(delay=3.0).scrape())
+            all_jobs.extend(naukri_jobs)
+            log.info("  Naukri: %d jobs", len(naukri_jobs))
+        except Exception as e:
+            log.error("  Naukri ERROR: %s", e)
+
+        try:
+            from scrapers.html.freshersworld import FreshersworldScraper
+            fw_jobs = asyncio.run(FreshersworldScraper().scrape())
+            all_jobs.extend(fw_jobs)
+            log.info("  Freshersworld: %d jobs", len(fw_jobs))
+        except Exception as e:
+            log.error("  Freshersworld ERROR: %s", e)
+
         # ── Deduplicate and insert ──
         log.info("Processing %d total scraped jobs...", len(all_jobs))
         unique_jobs = []
@@ -148,6 +184,16 @@ def run_scrape_cycle():
         log.info("Inserted: %d new jobs", inserted)
         log.info("Skipped:  %d duplicates", len(all_jobs) - len(unique_jobs))
         log.info("Database: %d total | %d active", stats["total"], stats["active"])
+
+        # ── Gemini semantic scoring of new jobs ──
+        log.info("Running Gemini semantic scoring...")
+        try:
+            from recommendation.gemini_scorer import score_new_jobs
+            scored = asyncio.run(score_new_jobs(limit=100))
+            log.info("Gemini scored %d jobs", scored)
+        except Exception as e:
+            log.warning("Gemini scoring failed (non-fatal): %s", e)
+
         log.info("Cycle completed at %s", datetime.now().isoformat())
         log.info("=" * 60)
 

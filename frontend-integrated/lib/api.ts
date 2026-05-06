@@ -34,6 +34,9 @@ interface BackendJob {
   salary?: string | null;
   match_score?: number;
   match_reasons?: string[];
+  gemini_score?: number;
+  gemini_summary?: string;
+  gemini_reasons?: string[];
 }
 
 // ── Transformer ───────────────────────────────────────────────────────────────
@@ -71,8 +74,12 @@ function transformJob(b: BackendJob, index: number): Job {
     title: b.title || "Untitled",
     company: b.company || "Unknown",
     location: loc || "Not specified",
-    matchScore: typeof b.match_score === "number" ? b.match_score : 0,
-    description: b.description || "",
+    matchScore: typeof b.gemini_score === "number" && b.gemini_score > 0
+      ? b.gemini_score
+      : typeof b.match_score === "number" ? b.match_score : 0,
+    description: b.gemini_summary
+      ? `${b.gemini_summary}\n\n${b.description || ""}`
+      : b.description || "",
     requiredSkills,
     benefits: [],
     employmentType,

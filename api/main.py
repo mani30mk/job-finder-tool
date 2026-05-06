@@ -82,6 +82,7 @@ class JobResponse(BaseModel):
     match_score: Optional[float] = None
     match_reasons: Optional[List[str]] = None
     explanation: Optional[str] = None
+    gemini_summary: Optional[str] = None
 
 class RecommendationResponse(BaseModel):
     user_id: str
@@ -560,6 +561,16 @@ async def get_default_recommendations(
     recommendations = []
     for match in matches:
         job = match.job
+        # Prefer Gemini score when available, fall back to engine score
+        gemini_score = job.get("gemini_score") or 0
+        effective_score = gemini_score if gemini_score > 0 else match.overall_score
+        # Parse gemini_reasons from JSON string
+        gemini_reasons_raw = job.get("gemini_reasons", "[]")
+        try:
+            gemini_reasons_list = json.loads(gemini_reasons_raw) if isinstance(gemini_reasons_raw, str) else gemini_reasons_raw
+        except Exception:
+            gemini_reasons_list = []
+
         recommendations.append(JobResponse(
             job_id=job.get("job_id", ""),
             title=job.get("title", ""),
@@ -571,9 +582,10 @@ async def get_default_recommendations(
             source_platform=job.get("source_platform", ""),
             posted_date=job.get("posted_date", ""),
             salary=job.get("salary", None),
-            match_score=round(match.overall_score, 2),
-            match_reasons=match.match_reasons,
+            match_score=round(effective_score, 2),
+            match_reasons=gemini_reasons_list if gemini_reasons_list else match.match_reasons,
             explanation=getattr(match, 'explanation', None),
+            gemini_summary=job.get("gemini_summary", ""),
         ))
 
     return {

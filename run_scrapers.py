@@ -10,6 +10,10 @@ from parser.normalizer import normalize_job
 from parser.dedup import Deduplicator
 from scrapers.universal import UniversalJobScraper
 from scrapers.html.internshala import InternshalaScraper
+from scrapers.remotive_api import RemotiveScraper
+from scrapers.arbeitnow_api import ArbeitnowScraper
+from scrapers.naukri import NaukriScraper
+from scrapers.html.freshersworld import FreshersworldScraper
 
 # Load configuration from .env file
 Config.load()
@@ -109,6 +113,38 @@ async def run_all():
         print(f"   Got {len(jobs)} jobs")
     except Exception as e:
         print(f"   ERROR: {e}")
+
+    # 5. Free API sources (Remotive + Arbeitnow)
+    print("\n--- Phase 5: Free API Sources (Remotive + Arbeitnow) ---")
+    try:
+        remotive_jobs = await RemotiveScraper(limit=200).scrape()
+        all_jobs.extend(remotive_jobs)
+        print(f"   Remotive: {len(remotive_jobs)} jobs")
+    except Exception as e:
+        print(f"   Remotive ERROR: {e}")
+
+    try:
+        arbeitnow_jobs = await ArbeitnowScraper(max_pages=3).scrape()
+        all_jobs.extend(arbeitnow_jobs)
+        print(f"   Arbeitnow: {len(arbeitnow_jobs)} jobs")
+    except Exception as e:
+        print(f"   Arbeitnow ERROR: {e}")
+
+    # 6. India-specific HTML scrapers (Naukri + Freshersworld)
+    print("\n--- Phase 6: India-Specific Sources ---")
+    try:
+        naukri_jobs = await NaukriScraper(delay=3.0).scrape()
+        all_jobs.extend(naukri_jobs)
+        print(f"   Naukri: {len(naukri_jobs)} jobs")
+    except Exception as e:
+        print(f"   Naukri ERROR: {e}")
+
+    try:
+        fw_jobs = await FreshersworldScraper().scrape()
+        all_jobs.extend(fw_jobs)
+        print(f"   Freshersworld: {len(fw_jobs)} jobs")
+    except Exception as e:
+        print(f"   Freshersworld ERROR: {e}")
 
     # Deduplicate and insert
     print("\n--- Processing ---")

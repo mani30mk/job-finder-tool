@@ -35,7 +35,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install python-dotenv selectolax httpx aiohttp
+          pip install python-dotenv selectolax httpx aiohttp rapidfuzz google-generativeai
 
       - name: Run scrapers
         env:
@@ -44,6 +44,7 @@ jobs:
           THEIRSTACK_KEY: ${{ secrets.THEIRSTACK_KEY }}
           ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
           ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           python scheduler.py --run-once
 

@@ -27,6 +27,7 @@ class Config:
     THEIRSTACK_KEY: str = ""
     ADZUNA_APP_ID: str = ""
     ADZUNA_APP_KEY: str = ""
+    GEMINI_API_KEY: str = ""
 
     # --- LinkedIn (optional, local only) ---
     LINKEDIN_EMAIL: str = ""
@@ -76,6 +77,7 @@ class Config:
         cls.THEIRSTACK_KEY = os.getenv("THEIRSTACK_KEY", "")
         cls.ADZUNA_APP_ID = os.getenv("ADZUNA_APP_ID", "")
         cls.ADZUNA_APP_KEY = os.getenv("ADZUNA_APP_KEY", "")
+        cls.GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
         cls.LINKEDIN_EMAIL = os.getenv("LINKEDIN_EMAIL", "")
         cls.LINKEDIN_PASSWORD = os.getenv("LINKEDIN_PASSWORD", "")
 

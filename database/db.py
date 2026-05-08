@@ -7,50 +7,38 @@ from pathlib import Path
 from app_config.settings import DB_PATH
 from database.models import SCHEMA_SQL
 
-
 import os
-import libsql_client
+import libsql_experimental as libsql
 from dotenv import load_dotenv
 
 load_dotenv()
 
 TURSO_URL = os.environ.get("TURSO_DATABASE_URL", "").strip().strip("\"'")
 TURSO_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "").strip().strip("\"'")
-# Keep the native libsql:// scheme — the Python libsql_client sync client
-# requires it (https:// is NOT supported and causes 'Unsupported URL scheme' errors).
-# Do NOT replace libsql:// with https:// here.
+
 
 def init_db():
     """Initialize database with schema."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     if TURSO_URL:
-        # Turso uses a cloud db, schema is already created by migration script.
-        # So we skip local schema creation for Turso.
-        print(f"[DB] Using Turso cloud database: {TURSO_URL}")
+        print(f"[DB] Using Turso cloud database: {TURSO_URL[:30]}***")
         return
-
     with get_conn() as conn:
         conn.executescript(SCHEMA_SQL)
         conn.commit()
     print(f"[DB] Initialized local sqlite at {DB_PATH}")
 
+
 @contextmanager
 def get_conn():
-    """Returns a local sqlite connection or a fake sqlite connection wrapping libsql sync client."""
+    """Returns a local sqlite connection or a wrapper around libsql_experimental for Turso."""
     if TURSO_URL:
-        # Validate the URL looks sane before handing it to libsql_client
-        if not TURSO_URL.startswith(("libsql://", "wss://", "ws://", "file:")):
-            raise ValueError(
-                f"[DB] TURSO_DATABASE_URL has an unsupported scheme: '{TURSO_URL[:30]}...'. "
-                "It must start with 'libsql://' (e.g. libsql://<db>.turso.io). "
-                "Check that the TURSO_DATABASE_URL secret is set correctly in GitHub."
-            )
 
         class RowMock:
             """Mimics sqlite3.Row so callers can use row['col'] or row[0]."""
             def __init__(self, cols, row):
-                self.cols = cols
-                self.row = row
+                self.cols = list(cols)
+                self.row = list(row)
             def __getitem__(self, key):
                 if isinstance(key, int):
                     return self.row[key]
@@ -75,19 +63,32 @@ def get_conn():
 
         class TursoWrapper:
             def __init__(self):
-                self.client = libsql_client.create_client_sync(TURSO_URL, auth_token=TURSO_TOKEN)
+                # libsql_experimental uses https:// internally — pass libsql:// URL as-is
+                self.conn = libsql.connect(
+                    database=TURSO_URL,
+                    auth_token=TURSO_TOKEN,
+                    sync_url=TURSO_URL,
+                )
+
             def execute(self, sql, params=()):
-                res = self.client.execute(sql, params)
-                rows = [RowMock(res.columns, r) for r in res.rows]
+                cur = self.conn.execute(sql, params)
+                cols = [d[0] for d in cur.description] if cur.description else []
+                rows = [RowMock(cols, r) for r in (cur.fetchall() or [])]
                 return ResultSet(rows)
+
             def executemany(self, sql, params_list):
-                stmts = [libsql_client.Statement(sql, p) for p in params_list]
-                self.client.batch(stmts)
+                for p in params_list:
+                    self.conn.execute(sql, p)
+
+            def executescript(self, sql):
+                self.conn.executescript(sql)
+
             def commit(self):
-                pass
+                self.conn.commit()
+
             def close(self):
-                self.client.close()
-                
+                pass  # libsql_experimental manages its own lifecycle
+
         wrapper = TursoWrapper()
         try:
             yield wrapper
@@ -127,9 +128,8 @@ def insert_jobs(jobs: List[Dict]) -> int:
             except sqlite3.IntegrityError:
                 pass  # Duplicate job_id (local sqlite)
             except Exception as e:
-                # Turso/libsql raises a generic exception for constraint violations
                 err_msg = str(e).lower()
-                if "unique" in err_msg or "constraint" in err_msg or "duplicate" in err_msg or "conflict" in err_msg:
+                if any(k in err_msg for k in ("unique", "constraint", "duplicate", "conflict")):
                     pass  # Duplicate job_id (Turso)
                 else:
                     raise
@@ -214,6 +214,7 @@ def get_stats() -> Dict:
         total = conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
         active = conn.execute("SELECT COUNT(*) FROM jobs WHERE is_active = 1").fetchone()[0]
         new = conn.execute("SELECT COUNT(*) FROM jobs WHERE is_new = 1").fetchone()[0]
+        saved = conn.execute("SELECT COUNT(*) FROM jobs WHERE is_saved = 1").fetchone()[0]
         platforms = conn.execute(
             "SELECT source_platform, COUNT(*) as cnt FROM jobs GROUP BY source_platform"
         ).fetchall()
@@ -221,5 +222,63 @@ def get_stats() -> Dict:
             "total": total,
             "active": active,
             "new": new,
+            "saved": saved,
             "by_platform": {r["source_platform"]: r["cnt"] for r in platforms}
         }
+
+
+def delete_old_jobs(days: int = 30) -> int:
+    """Permanently DELETE jobs older than N days, EXCEPT saved ones."""
+    from datetime import datetime, timedelta
+    cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+    with get_conn() as conn:
+        result = conn.execute(
+            "SELECT COUNT(*) FROM jobs WHERE scraped_at < ? AND is_saved = 0",
+            (cutoff,)
+        ).fetchone()
+        count = result[0] if result else 0
+        if count > 0:
+            conn.execute(
+                "DELETE FROM jobs WHERE scraped_at < ? AND is_saved = 0",
+                (cutoff,)
+            )
+            conn.commit()
+        return count
+
+
+def toggle_save_job(job_id: str) -> bool:
+    """Toggle is_saved for a job. Returns new saved state."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT is_saved FROM jobs WHERE job_id = ?", (job_id,)
+        ).fetchone()
+        if row is None:
+            return False
+        new_state = 0 if row[0] else 1
+        conn.execute(
+            "UPDATE jobs SET is_saved = ? WHERE job_id = ?",
+            (new_state, job_id)
+        )
+        conn.commit()
+        return bool(new_state)
+
+
+def set_job_saved(job_id: str, saved: bool = True) -> bool:
+    """Set is_saved for a job. Returns True if job existed."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE jobs SET is_saved = ? WHERE job_id = ?",
+            (1 if saved else 0, job_id)
+        )
+        conn.commit()
+        return True
+
+
+def get_saved_jobs(limit: int = 200) -> list:
+    """Get all saved jobs."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM jobs WHERE is_saved = 1 ORDER BY scraped_at DESC LIMIT ?",
+            (limit,)
+        ).fetchall()
+        return rows

@@ -35,7 +35,24 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install python-dotenv selectolax httpx aiohttp rapidfuzz google-generativeai libsql-client
+          pip install python-dotenv selectolax httpx aiohttp rapidfuzz google-generativeai libsql-experimental
+
+      - name: Validate Turso secrets
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: |
+          if [ -z "$TURSO_DATABASE_URL" ]; then
+            echo "❌ ERROR: TURSO_DATABASE_URL secret is not set or is empty."
+            echo "Go to: Settings → Secrets and variables → Actions → New repository secret"
+            echo "Add TURSO_DATABASE_URL with your Turso DB URL (e.g. libsql://<db-name>.turso.io)"
+            exit 1
+          fi
+          if [ -z "$TURSO_AUTH_TOKEN" ]; then
+            echo "❌ ERROR: TURSO_AUTH_TOKEN secret is not set or is empty."
+            exit 1
+          fi
+          echo "✅ Turso secrets are present (URL scheme: $(echo $TURSO_DATABASE_URL | cut -d: -f1))"
 
       - name: Run scrapers
         env:

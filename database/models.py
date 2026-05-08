@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     is_new BOOLEAN DEFAULT 1,
     gemini_score REAL DEFAULT 0.0,
     gemini_reasons TEXT,
-    gemini_summary TEXT
+    gemini_summary TEXT,
+    is_saved BOOLEAN DEFAULT 0
 );
 
 -- Full-text search virtual table
@@ -53,4 +54,5 @@ CREATE INDEX IF NOT EXISTS idx_jobs_platform ON jobs(source_platform);
 CREATE INDEX IF NOT EXISTS idx_jobs_active ON jobs(is_active);
 CREATE INDEX IF NOT EXISTS idx_jobs_new ON jobs(is_new);
 CREATE INDEX IF NOT EXISTS idx_jobs_scraped ON jobs(scraped_at);
+CREATE INDEX IF NOT EXISTS idx_jobs_saved ON jobs(is_saved);
 """

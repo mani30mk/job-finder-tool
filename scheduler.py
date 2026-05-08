@@ -9,6 +9,7 @@ Usage:
     python scheduler.py                  # Same as --run-once
 """
 import sys
+import os
 import argparse
 import logging
 from pathlib import Path
@@ -16,6 +17,9 @@ from datetime import datetime
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.resolve()))
+
+# Detect if running in GitHub Actions
+IS_CI = os.environ.get("GITHUB_ACTIONS") == "true"
 
 # ── Logging setup ──────────────────────────────────────────────────────────────
 LOG_DIR = Path(__file__).parent / "logs"
@@ -37,6 +41,7 @@ def run_scrape_cycle():
     """Execute a full scrape cycle: scrape → deduplicate → insert → cleanup."""
     log.info("=" * 60)
     log.info("Starting scrape cycle at %s", datetime.now().isoformat())
+    log.info("Running in CI mode: %s", IS_CI)
     log.info("=" * 60)
 
     try:
@@ -115,16 +120,19 @@ def run_scrape_cycle():
         except Exception as e:
             log.error("  Adzuna ERROR: %s", e)
 
-        # ── Phase 4: Internshala (India-specific internships) — TOP PRIORITY ──
-        log.info("Phase 4: Internshala (India internships)")
-        try:
-            from scrapers.html.internshala import InternshalaScraper
-            ins = InternshalaScraper()
-            jobs = asyncio.run(ins.scrape())
-            all_jobs.extend(jobs)
-            log.info("  Internshala: %d jobs", len(jobs))
-        except Exception as e:
-            log.error("  Internshala ERROR: %s", e)
+        # ── Phase 4: Internshala — SKIP in CI (uses Playwright) ──
+        if IS_CI:
+            log.info("Phase 4: Internshala — SKIPPED in CI (Playwright not supported)")
+        else:
+            log.info("Phase 4: Internshala (India internships)")
+            try:
+                from scrapers.html.internshala import InternshalaScraper
+                ins = InternshalaScraper()
+                jobs = asyncio.run(ins.scrape())
+                all_jobs.extend(jobs)
+                log.info("  Internshala: %d jobs", len(jobs))
+            except Exception as e:
+                log.error("  Internshala ERROR: %s", e)
 
         # ── Phase 5: Free API sources (Remotive + Arbeitnow) ──
         log.info("Phase 5: Free API sources (Remotive + Arbeitnow)")
@@ -144,23 +152,26 @@ def run_scrape_cycle():
         except Exception as e:
             log.error("  Arbeitnow ERROR: %s", e)
 
-        # ── Phase 6: India-specific HTML scrapers ──
-        log.info("Phase 6: India-specific (Naukri + Freshersworld)")
-        try:
-            from scrapers.naukri import NaukriScraper
-            naukri_jobs = asyncio.run(NaukriScraper(delay=3.0).scrape())
-            all_jobs.extend(naukri_jobs)
-            log.info("  Naukri: %d jobs", len(naukri_jobs))
-        except Exception as e:
-            log.error("  Naukri ERROR: %s", e)
+        # ── Phase 6: India-specific HTML scrapers — SKIP in CI (uses Playwright) ──
+        if IS_CI:
+            log.info("Phase 6: Naukri + Freshersworld — SKIPPED in CI (Playwright not supported)")
+        else:
+            log.info("Phase 6: India-specific (Naukri + Freshersworld)")
+            try:
+                from scrapers.naukri import NaukriScraper
+                naukri_jobs = asyncio.run(NaukriScraper(delay=3.0).scrape())
+                all_jobs.extend(naukri_jobs)
+                log.info("  Naukri: %d jobs", len(naukri_jobs))
+            except Exception as e:
+                log.error("  Naukri ERROR: %s", e)
 
-        try:
-            from scrapers.html.freshersworld import FreshersworldScraper
-            fw_jobs = asyncio.run(FreshersworldScraper().scrape())
-            all_jobs.extend(fw_jobs)
-            log.info("  Freshersworld: %d jobs", len(fw_jobs))
-        except Exception as e:
-            log.error("  Freshersworld ERROR: %s", e)
+            try:
+                from scrapers.html.freshersworld import FreshersworldScraper
+                fw_jobs = asyncio.run(FreshersworldScraper().scrape())
+                all_jobs.extend(fw_jobs)
+                log.info("  Freshersworld: %d jobs", len(fw_jobs))
+            except Exception as e:
+                log.error("  Freshersworld ERROR: %s", e)
 
         # ── Deduplicate and insert ──
         log.info("Processing %d total scraped jobs...", len(all_jobs))

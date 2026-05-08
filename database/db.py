@@ -14,8 +14,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-TURSO_URL = os.environ.get("TURSO_DATABASE_URL", "").strip()
-TURSO_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "").strip()
+TURSO_URL = os.environ.get("TURSO_DATABASE_URL", "").strip().strip("\"'")
+TURSO_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "").strip().strip("\"'")
 # Keep the native libsql:// scheme — the Python libsql_client sync client
 # requires it (https:// is NOT supported and causes 'Unsupported URL scheme' errors).
 # Do NOT replace libsql:// with https:// here.

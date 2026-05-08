@@ -14,11 +14,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-TURSO_URL = os.environ.get("TURSO_DATABASE_URL")
-TURSO_TOKEN = os.environ.get("TURSO_AUTH_TOKEN")
-# Make sure we use https instead of libsql for the sync client to avoid websocket issues sometimes
-if TURSO_URL and TURSO_URL.startswith("libsql://"):
-    TURSO_URL = TURSO_URL.replace("libsql://", "https://")
+TURSO_URL = os.environ.get("TURSO_DATABASE_URL", "").strip()
+TURSO_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "").strip()
+# Keep the native libsql:// scheme — the Python libsql_client sync client
+# requires it (https:// is NOT supported and causes 'Unsupported URL scheme' errors).
+# Do NOT replace libsql:// with https:// here.
 
 def init_db():
     """Initialize database with schema."""
@@ -38,27 +38,48 @@ def init_db():
 def get_conn():
     """Returns a local sqlite connection or a fake sqlite connection wrapping libsql sync client."""
     if TURSO_URL:
-        # We don't yield a sqlite connection, instead we could use a custom wrapper 
-        # but let's see if we can just yield the libsql sync client.
-        # Wait, the rest of the code expects sqlite3 methods like execute, executemany, commit.
-        # Let's write a small wrapper that mimics sqlite3 enough for our code.
+        # Validate the URL looks sane before handing it to libsql_client
+        if not TURSO_URL.startswith(("libsql://", "wss://", "ws://", "file:")):
+            raise ValueError(
+                f"[DB] TURSO_DATABASE_URL has an unsupported scheme: '{TURSO_URL[:30]}...'. "
+                "It must start with 'libsql://' (e.g. libsql://<db>.turso.io). "
+                "Check that the TURSO_DATABASE_URL secret is set correctly in GitHub."
+            )
+
+        class RowMock:
+            """Mimics sqlite3.Row so callers can use row['col'] or row[0]."""
+            def __init__(self, cols, row):
+                self.cols = cols
+                self.row = row
+            def __getitem__(self, key):
+                if isinstance(key, int):
+                    return self.row[key]
+                return self.row[self.cols.index(key)]
+            def keys(self):
+                return self.cols
+
+        class ResultSet:
+            """Mimics a sqlite3 cursor result so .fetchall() and .fetchone() work."""
+            def __init__(self, rows):
+                self._rows = rows
+            def fetchall(self):
+                return self._rows
+            def fetchone(self):
+                return self._rows[0] if self._rows else None
+            def __iter__(self):
+                return iter(self._rows)
+            def __len__(self):
+                return len(self._rows)
+            def __getitem__(self, idx):
+                return self._rows[idx]
+
         class TursoWrapper:
             def __init__(self):
                 self.client = libsql_client.create_client_sync(TURSO_URL, auth_token=TURSO_TOKEN)
             def execute(self, sql, params=()):
                 res = self.client.execute(sql, params)
-                # Mock sqlite3.Row
-                class RowMock:
-                    def __init__(self, cols, row):
-                        self.cols = cols
-                        self.row = row
-                    def __getitem__(self, key):
-                        if isinstance(key, int):
-                            return self.row[key]
-                        return self.row[self.cols.index(key)]
-                    def keys(self):
-                        return self.cols
-                return [RowMock(res.columns, r) for r in res.rows]
+                rows = [RowMock(res.columns, r) for r in res.rows]
+                return ResultSet(rows)
             def executemany(self, sql, params_list):
                 stmts = [libsql_client.Statement(sql, p) for p in params_list]
                 self.client.batch(stmts)
@@ -104,7 +125,14 @@ def insert_jobs(jobs: List[Dict]) -> int:
                 ))
                 inserted += 1
             except sqlite3.IntegrityError:
-                pass  # Duplicate job_id
+                pass  # Duplicate job_id (local sqlite)
+            except Exception as e:
+                # Turso/libsql raises a generic exception for constraint violations
+                err_msg = str(e).lower()
+                if "unique" in err_msg or "constraint" in err_msg or "duplicate" in err_msg or "conflict" in err_msg:
+                    pass  # Duplicate job_id (Turso)
+                else:
+                    raise
         conn.commit()
     return inserted
 

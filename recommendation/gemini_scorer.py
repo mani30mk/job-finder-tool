@@ -135,53 +135,49 @@ async def score_new_jobs(limit: int = 100) -> int:
         print("   [Gemini] Get free key at: https://aistudio.google.com/apikey")
         return 0
 
-    import sqlite3
-    db_path = Path(__file__).resolve().parent.parent / "jobs.db"
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
+    from database.db import get_conn
 
-    rows = conn.execute("""
-        SELECT job_id, title, company, location, employment_type,
-               description, match_score
-        FROM jobs
-        WHERE is_new = 1
-          AND is_active = 1
-          AND (gemini_score IS NULL OR gemini_score = 0)
-        ORDER BY scraped_at DESC
-        LIMIT ?
-    """, (limit,)).fetchall()
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT job_id, title, company, location, employment_type,
+                   description, match_score
+            FROM jobs
+            WHERE is_new = 1
+              AND is_active = 1
+              AND (gemini_score IS NULL OR gemini_score = 0)
+            ORDER BY scraped_at DESC
+            LIMIT ?
+        """, (limit,)).fetchall()
 
-    if not rows:
-        print("   [Gemini] No unscored new jobs found")
-        conn.close()
-        return 0
+        if not rows:
+            print("   [Gemini] No unscored new jobs found")
+            return 0
 
-    jobs = [dict(r) for r in rows]
-    print(f"   [Gemini] Scoring {len(jobs)} new jobs with {GEMINI_MODEL}...")
+        jobs = [dict(r) for r in rows]
+        print(f"   [Gemini] Scoring {len(jobs)} new jobs with {GEMINI_MODEL}...")
 
-    scored = 0
-    async with httpx.AsyncClient() as client:
-        for i, job in enumerate(jobs):
-            result = await score_job(job, client)
-            conn.execute(
-                """UPDATE jobs
-                   SET gemini_score=?, gemini_reasons=?, gemini_summary=?
-                   WHERE job_id=?""",
-                (
-                    result["gemini_score"],
-                    result["gemini_reasons"],
-                    result["gemini_summary"],
-                    job["job_id"],
+        scored = 0
+        async with httpx.AsyncClient() as client:
+            for i, job in enumerate(jobs):
+                result = await score_job(job, client)
+                conn.execute(
+                    """UPDATE jobs
+                       SET gemini_score=?, gemini_reasons=?, gemini_summary=?
+                       WHERE job_id=?""",
+                    (
+                        result["gemini_score"],
+                        result["gemini_reasons"],
+                        result["gemini_summary"],
+                        job["job_id"],
+                    )
                 )
-            )
-            conn.commit()
-            scored += 1
-            print(f"   [Gemini] [{i+1}/{len(jobs)}] {job['title'][:40]} → {result['gemini_score']:.2f}")
-            # Stay under 30 RPM free tier limit
-            if i < len(jobs) - 1:
-                await asyncio.sleep(2.1)
+                conn.commit()
+                scored += 1
+                print(f"   [Gemini] [{i+1}/{len(jobs)}] {job['title'][:40]} → {result['gemini_score']:.2f}")
+                # Stay under 30 RPM free tier limit
+                if i < len(jobs) - 1:
+                    await asyncio.sleep(2.1)
 
-    conn.close()
     print(f"   [Gemini] Done. Scored {scored} jobs.")
     return scored
 

@@ -31,7 +31,15 @@ export async function GET(request: Request) {
       args.push(source);
     }
 
-    sql += " ORDER BY posted_date DESC LIMIT ? OFFSET ?";
+    sql += ` ORDER BY 
+            CASE WHEN source_platform = 'internshala' THEN 0 ELSE 1 END,
+            CASE WHEN location LIKE '%india%' OR location LIKE '%bangalore%'
+                      OR location LIKE '%bengaluru%' OR location LIKE '%chennai%'
+                      OR location LIKE '%hyderabad%' OR location LIKE '%pune%'
+                      OR location LIKE '%mumbai%' OR location LIKE '%delhi%'
+                      OR location LIKE '%remote%'
+                 THEN 0 ELSE 1 END,
+            posted_date DESC LIMIT ? OFFSET ?`;
     args.push(limit, offset);
 
     const result = await turso.execute({ sql, args });

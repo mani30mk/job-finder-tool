@@ -67,7 +67,6 @@ def get_conn():
                 self.conn = libsql.connect(
                     database=TURSO_URL,
                     auth_token=TURSO_TOKEN,
-                    sync_url=TURSO_URL,
                 )
 
             def execute(self, sql, params=()):
